@@ -1,0 +1,6 @@
+"""
+tasks.jsonl — Phase 2
+Hand-written task dataset: 5 starter tasks across 3 difficulty tiers.
+Each task has: id, description, initial_state, expected_final_state.
+Expand to 20 → 50 → 100 as the harness stabilizes.
+"""
