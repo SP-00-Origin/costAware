@@ -68,3 +68,28 @@ costaware/
 - **Error Propagation:** Downstream impact of undetected faults.
 - **Verification Overhead & Cost:** Cumulative token cost, API calls, and end-to-end latency.
 - **Pareto Efficiency:** Reliability curve relative to the verification budget.
+
+## Python Environment
+
+All project dependencies are listed in [requirements.txt](requirements.txt), grouped by purpose:
+
+- Core orchestration: LangGraph, LangChain, and provider integrations
+- LLM providers and token tracking: Anthropic, OpenAI, and tiktoken
+- Models and configuration: Pydantic, python-dotenv, and PyYAML
+- Numerical analysis: NumPy, pandas, and SciPy
+- Evaluation and reporting: Matplotlib, seaborn, Plotly, tabulate, Rich, and tqdm
+- Testing: pytest, pytest-asyncio, and pytest-cov
+
+Install all dependencies with the active Python interpreter:
+
+```text
+python scripts/install_dependencies.py
+```
+
+Check the current environment without installing anything:
+
+```text
+python scripts/install_dependencies.py --check
+```
+
+For the Phase 1 simulator, the dependencies used directly are Pydantic for entity/state models and pytest for the test suite. During the Phase 1 audit, those two packages were installed into the `costaware_env` conda environment because they were missing.

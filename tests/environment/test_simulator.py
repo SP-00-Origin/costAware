@@ -95,8 +95,10 @@ class TestToolRegistry:
         for name, meta in TOOL_REGISTRY.items():
             assert "risk" in meta, f"{name} missing risk"
             assert "type" in meta, f"{name} missing type"
+            assert "mutates_state" in meta, f"{name} missing mutation metadata"
             assert meta["risk"] in ("low", "medium", "high")
             assert meta["type"] in ("read", "write", "compute")
+            assert isinstance(meta["mutates_state"], bool)
 
     def test_get_tools_returns_callables(self, sim):
         tools = sim.get_tools()

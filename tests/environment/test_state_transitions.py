@@ -156,6 +156,34 @@ class TestApprovalInvalidation:
         sim.approve_order(apr2["approval_id"])
         assert sim.state.orders[po["po_id"]].status == POStatus.APPROVED
 
+    def test_modify_reconciles_reserved_budget(self, sim):
+        po = sim.create_purchase_order("V1", "C-A", 10, 480.0, "PROJ-A", 200.0)
+        assert sim.state.budgets["BUD-A"].reserved == 5000.0
+
+        sim.modify_order(po["po_id"], quantity=20)
+
+        assert sim.state.budgets["BUD-A"].reserved == 9800.0
+
+    def test_failed_modify_is_atomic(self, sim):
+        po = sim.create_purchase_order("V1", "C-A", 10, 480.0, "PROJ-A", 200.0)
+        before_po = sim.state.orders[po["po_id"]].model_copy(deep=True)
+        before_budget = sim.state.budgets["BUD-A"].model_copy(deep=True)
+
+        result = sim.modify_order(po["po_id"], quantity=50, unit_price=1800.0)
+
+        assert "error" in result
+        assert sim.state.orders[po["po_id"]] == before_po
+        assert sim.state.budgets["BUD-A"] == before_budget
+
+    def test_duplicate_approval_request_is_rejected(self, sim):
+        po = sim.create_purchase_order("V1", "C-A", 10, 480.0, "PROJ-A")
+        first = sim.request_approval(po["po_id"], "alice")
+
+        second = sim.request_approval(po["po_id"], "alice")
+
+        assert first["approval_id"] == "APR-001"
+        assert "error" in second
+
 
 # ─── Budget Flows ──────────────────────────────────────────────────────────────
 

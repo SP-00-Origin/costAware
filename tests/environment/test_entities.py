@@ -4,6 +4,7 @@ Verify that all procurement entity models construct correctly,
 computed properties work, and enum values are correct.
 """
 import pytest
+from pydantic import ValidationError
 from src.environment.entities import (
     Vendor, Component, SupplierQuote, Project, Budget,
     PurchaseOrder, Approval, Invoice, Shipment,
@@ -67,6 +68,11 @@ class TestComponent:
         assert c.required_qty == 10
         assert c.available_qty == 50
 
+    def test_rejects_invalid_quantities(self):
+        with pytest.raises(ValidationError):
+            Component(id="C-A", name="Board", category="electronics",
+                      reference_price=500.0, required_qty=0, available_qty=50)
+
 
 class TestSupplierQuote:
     def test_construct_and_total_price(self):
@@ -113,6 +119,11 @@ class TestPurchaseOrder:
         assert po.status == POStatus.DRAFT
         assert po.approval_id is None
         assert po.released is False
+
+    def test_rejects_invalid_price(self):
+        with pytest.raises(ValidationError):
+            PurchaseOrder(id="PO-001", vendor_id="V1", component_id="C-A",
+                          quantity=10, unit_price=0, project_id="PROJ-A")
 
 
 class TestApproval:

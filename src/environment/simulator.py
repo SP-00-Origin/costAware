@@ -21,24 +21,24 @@ from .entities import (
 
 TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
     # READ — Low Risk
-    "search_vendors":       {"risk": "low",    "type": "read",  "description": "Find candidate suppliers"},
-    "get_vendor_details":   {"risk": "low",    "type": "read",  "description": "Vendor profile/eligibility"},
-    "check_vendor_status":  {"risk": "low",    "type": "read",  "description": "Current approval/suspension"},
-    "get_quotes":           {"risk": "low",    "type": "read",  "description": "Supplier quotes for a component"},
-    "check_quote_validity": {"risk": "low",    "type": "read",  "description": "Expiry/constraint check"},
-    "check_budget":         {"risk": "low",    "type": "read",  "description": "Budget/reserved amount"},
-    "check_existing_orders":{"risk": "low",    "type": "read",  "description": "Existing commitments for a project"},
-    "compare_quotes":       {"risk": "low",    "type": "compute", "description": "Compare and rank quotes"},
-    "check_invoice":        {"risk": "low",    "type": "read",  "description": "Inspect invoice/PO consistency"},
+    "search_vendors":       {"risk": "low",    "type": "read",  "mutates_state": False, "description": "Find candidate suppliers"},
+    "get_vendor_details":   {"risk": "low",    "type": "read",  "mutates_state": False, "description": "Vendor profile/eligibility"},
+    "check_vendor_status":  {"risk": "low",    "type": "read",  "mutates_state": False, "description": "Current approval/suspension"},
+    "get_quotes":           {"risk": "low",    "type": "read",  "mutates_state": False, "description": "Supplier quotes for a component"},
+    "check_quote_validity": {"risk": "low",    "type": "read",  "mutates_state": False, "description": "Expiry/constraint check"},
+    "check_budget":         {"risk": "low",    "type": "read",  "mutates_state": False, "description": "Budget/reserved amount"},
+    "check_existing_orders":{"risk": "low",    "type": "read",  "mutates_state": False, "description": "Existing commitments for a project"},
+    "compare_quotes":       {"risk": "low",    "type": "compute", "mutates_state": False, "description": "Compare and rank quotes"},
+    "check_invoice":        {"risk": "low",    "type": "read",  "mutates_state": False, "description": "Inspect invoice/PO consistency"},
     # WRITE — Medium Risk
-    "request_discount":     {"risk": "medium", "type": "write", "description": "Request negotiated terms"},
-    "request_approval":     {"risk": "medium", "type": "write", "description": "Submit PO for approval"},
+    "request_discount":     {"risk": "medium", "type": "write", "mutates_state": True, "description": "Request negotiated terms"},
+    "request_approval":     {"risk": "medium", "type": "write", "mutates_state": True, "description": "Submit PO for approval"},
     # WRITE — High Risk
-    "create_purchase_order":{"risk": "high",   "type": "write", "description": "Create PO/reserve budget"},
-    "modify_order":         {"risk": "high",   "type": "write", "description": "Change PO quantity/price"},
-    "approve_order":        {"risk": "high",   "type": "write", "description": "Change approval state"},
-    "release_order":        {"risk": "high",   "type": "write", "description": "Release approved PO"},
-    "cancel_order":         {"risk": "high",   "type": "write", "description": "Cancel PO"},
+    "create_purchase_order":{"risk": "high",   "type": "write", "mutates_state": True, "description": "Create PO/reserve budget"},
+    "modify_order":         {"risk": "high",   "type": "write", "mutates_state": True, "description": "Change PO quantity/price"},
+    "approve_order":        {"risk": "high",   "type": "write", "mutates_state": True, "description": "Change approval state"},
+    "release_order":        {"risk": "high",   "type": "write", "mutates_state": True, "description": "Release approved PO"},
+    "cancel_order":         {"risk": "high",   "type": "write", "mutates_state": True, "description": "Cancel PO"},
 }
 
 
@@ -184,19 +184,30 @@ class ProcurementSimulator:
     # ─── Tools — WRITE (Medium Risk) ──────────────────────────────────────────
 
     def request_discount(self, vendor_id: str, quote_id: str, requested_price: float) -> Dict[str, Any]:
+        vendor = self._true_state.vendors.get(vendor_id)
+        if not vendor:
+            return {"error": f"Vendor {vendor_id} not found"}
         q = self._true_state.quotes.get(quote_id)
         if not q:
             return {"error": f"Quote {quote_id} not found"}
-        # Simple rule: grant 5% discount if requested price is >= 95% of current
-        if requested_price >= q.unit_price * 0.90:
+        if q.vendor_id != vendor_id:
+            return {"error": f"Quote {quote_id} does not belong to vendor {vendor_id}"}
+        if requested_price <= 0:
+            return {"success": False, "reason": "Requested price must be greater than 0"}
+        # Grant a discount only when the request is lower but no more than 10% below current price.
+        if q.unit_price * 0.90 <= requested_price < q.unit_price:
             q.unit_price = requested_price
             return {"success": True, "new_unit_price": requested_price, "quote_id": quote_id}
-        return {"success": False, "reason": "Requested discount too large", "min_price": q.unit_price * 0.90}
+        return {"success": False, "reason": "Requested discount is outside the allowed range", "min_price": q.unit_price * 0.90}
 
     def request_approval(self, po_id: str, requester: str) -> Dict[str, Any]:
         po = self._true_state.orders.get(po_id)
         if not po:
             return {"error": f"PO {po_id} not found"}
+        if po.status != POStatus.DRAFT:
+            return {"error": f"Cannot request approval for PO in status {po.status.value}"}
+        if not requester:
+            return {"error": "Requester is required"}
         self._approval_counter += 1
         approval_id = f"APR-{self._approval_counter:03d}"
         approval = Approval(
@@ -222,6 +233,8 @@ class ProcurementSimulator:
             return {"error": f"Vendor {vendor_id} not found"}
         if not vendor.eligible or vendor.suspended:
             return {"error": "Vendor is not eligible or is suspended"}
+        if not vendor.approved:
+            return {"error": "Vendor is not approved"}
         # Validate component
         component = self._true_state.components.get(component_id)
         if not component:
@@ -229,6 +242,10 @@ class ProcurementSimulator:
         # Validate quantity
         if quantity <= 0:
             return {"error": "Quantity must be greater than 0"}
+        if unit_price <= 0:
+            return {"error": "Unit price must be greater than 0"}
+        if shipping_cost < 0:
+            return {"error": "Shipping cost cannot be negative"}
         # Validate project + budget
         project = self._true_state.projects.get(project_id)
         if not project:
@@ -237,6 +254,8 @@ class ProcurementSimulator:
         total_cost = unit_price * quantity + shipping_cost
         if budget and budget.remaining < total_cost:
             return {"error": "Insufficient budget", "remaining": budget.remaining, "required": total_cost}
+        if quantity > component.available_qty:
+            return {"error": "Quantity exceeds component availability"}
         # Create PO with deterministic ID and reserve budget
         self._po_counter += 1
         po_id = f"PO-{self._po_counter:03d}"
@@ -256,6 +275,24 @@ class ProcurementSimulator:
             return {"error": f"PO {po_id} not found"}
         if po.status not in [POStatus.DRAFT, POStatus.PENDING]:
             return {"error": f"Cannot modify PO in status {po.status.value}"}
+        if quantity is None and unit_price is None:
+            return {"error": "At least one order field must be provided"}
+        component = self._true_state.components.get(po.component_id)
+        if quantity is not None and (quantity <= 0 or (component and quantity > component.available_qty)):
+            return {"error": "Invalid order quantity"}
+        if unit_price is not None and unit_price <= 0:
+            return {"error": "Unit price must be greater than 0"}
+
+        new_quantity = quantity if quantity is not None else po.quantity
+        new_unit_price = unit_price if unit_price is not None else po.unit_price
+        new_total = new_quantity * new_unit_price + po.shipping_cost
+        project = self._true_state.projects.get(po.project_id)
+        budget = self._true_state.budgets.get(project.budget_id) if project else None
+        if budget and budget.remaining + po.total < new_total:
+            return {"error": "Insufficient budget", "remaining": budget.remaining + po.total, "required": new_total}
+
+        if budget:
+            budget.reserved += new_total - po.total
         # Invalidate existing approval if present
         if po.approval_id:
             apr = self._true_state.approvals.get(po.approval_id)
@@ -276,10 +313,13 @@ class ProcurementSimulator:
             return {"error": f"Approval {approval_id} not found"}
         if not apr.valid:
             return {"error": "Approval is no longer valid (PO was modified)"}
-        apr.status = ApprovalStatus.APPROVED
         po = self._true_state.orders.get(apr.po_id)
-        if po:
-            po.status = POStatus.APPROVED
+        if not po:
+            return {"error": f"PO {apr.po_id} not found"}
+        if po.status != POStatus.PENDING or apr.status != ApprovalStatus.PENDING:
+            return {"error": "Approval is not pending"}
+        apr.status = ApprovalStatus.APPROVED
+        po.status = POStatus.APPROVED
         return {"approval_id": approval_id, "status": "APPROVED", "po_id": apr.po_id}
 
     def release_order(self, po_id: str) -> Dict[str, Any]:
@@ -303,8 +343,8 @@ class ProcurementSimulator:
         po = self._true_state.orders.get(po_id)
         if not po:
             return {"error": f"PO {po_id} not found"}
-        if po.status == POStatus.RELEASED:
-            return {"error": "Cannot cancel a released PO"}
+        if po.status in [POStatus.RELEASED, POStatus.CANCELLED]:
+            return {"error": f"Cannot cancel PO in status {po.status.value}"}
         po.status = POStatus.CANCELLED
         # Free reserved budget
         project = self._true_state.projects.get(po.project_id)

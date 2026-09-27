@@ -51,19 +51,19 @@ class Component(BaseModel):
     id:              str
     name:            str
     category:        str
-    reference_price: float
-    required_qty:    int
-    available_qty:   int
+    reference_price: float = Field(ge=0)
+    required_qty:    int = Field(gt=0)
+    available_qty:   int = Field(ge=0)
 
 
 class SupplierQuote(BaseModel):
     id:           str
     vendor_id:    str
     component_id: str
-    unit_price:   float
-    quantity:     int
-    expiry_days:  int        # how many steps until expiry
-    shipping_cost: float = 0.0
+    unit_price:   float = Field(gt=0)
+    quantity:     int = Field(gt=0)
+    expiry_days:  int = Field(gt=0)        # how many steps until expiry
+    shipping_cost: float = Field(default=0.0, ge=0)
     status:       QuoteStatus = QuoteStatus.ACTIVE
 
     @property
@@ -82,9 +82,9 @@ class Project(BaseModel):
 
 class Budget(BaseModel):
     id:        str
-    allocated: float
-    spent:     float = 0.0
-    reserved:  float = 0.0
+    allocated: float = Field(ge=0)
+    spent:     float = Field(default=0.0, ge=0)
+    reserved:  float = Field(default=0.0, ge=0)
 
     @property
     def remaining(self) -> float:
@@ -95,9 +95,9 @@ class PurchaseOrder(BaseModel):
     id:           str
     vendor_id:    str
     component_id: str
-    quantity:     int
-    unit_price:   float
-    shipping_cost: float = 0.0
+    quantity:    int = Field(gt=0)
+    unit_price:  float = Field(gt=0)
+    shipping_cost: float = Field(default=0.0, ge=0)
     project_id:   str
     status:       POStatus = POStatus.DRAFT
     approval_id:  Optional[str] = None
