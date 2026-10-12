@@ -25,3 +25,6 @@ class SimulatorState(BaseModel):
     invoices:   Dict[str, Invoice]       = Field(default_factory=dict)
     shipments:  Dict[str, Shipment]      = Field(default_factory=dict)
     step:       int = 0                  # current simulator step (for quote expiry)
+    # Sequence counters → deterministic IDs (PO-0001, APR-0001) so runs are reproducible
+    po_seq:     int = 0
+    apr_seq:    int = 0

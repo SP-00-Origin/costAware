@@ -65,6 +65,11 @@ class SupplierQuote(BaseModel):
     expiry_days:  int        # how many steps until expiry
     shipping_cost: float = 0.0
     status:       QuoteStatus = QuoteStatus.ACTIVE
+    discount_used: bool = False   # a quote can be renegotiated at most once
+
+    def is_expired(self, step: int) -> bool:
+        """A quote expires once the simulator clock reaches expiry_days."""
+        return self.status == QuoteStatus.EXPIRED or step >= self.expiry_days
 
     @property
     def total_price(self) -> float:
@@ -102,6 +107,8 @@ class PurchaseOrder(BaseModel):
     status:       POStatus = POStatus.DRAFT
     approval_id:  Optional[str] = None
     released:     bool = False
+    quote_id:     Optional[str] = None   # quote the PO was priced from
+    created_step: Optional[int] = None   # None = existed before the task started
 
     @property
     def total(self) -> float:
