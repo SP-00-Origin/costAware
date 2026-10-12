@@ -25,6 +25,22 @@ Task Definition
 
 ---
 
+## 🚦 Status
+
+Phases 0–4 of the implementation plan are complete (simulator, 20-task dataset + oracle, fault injector, LangGraph agent).
+Details and design decisions: [`docs/PHASES_1-4.md`](docs/PHASES_1-4.md). Next: Phase 5 (self-verifier + recovery).
+
+```bash
+pip install -r requirements.txt
+python -m pytest tests -q                           # full test suite, no API key needed
+python scripts/validate_tasks.py                    # validate the task dataset
+python run_simulation.py --task T17 --rate 0.4      # deterministic pipeline demo
+python run_agent.py --task all --provider scripted  # agent graph dry run
+python run_agent.py --task all --provider anthropic # real agent (needs ANTHROPIC_API_KEY)
+```
+
+---
+
 ## 📁 Repository Structure
 
 ```text
@@ -44,8 +60,9 @@ costaware/
 │   ├── policies/         # Verification policies (adaptive, fixed, baselines)
 │   ├── graph/            # Workflow orchestration (LangGraph)
 │   └── evaluation/       # Performance, cost, and reliability metrics
-├── tasks/                # Benchmark scenarios and task datasets
-│   └── scenarios/        # Enterprise procurement/operations scenarios
+├── tasks/                # tasks.jsonl (generated) + build_tasks.py (source of truth)
+├── scripts/              # validate_tasks.py
+├── tests/                # pytest suite (simulator, tasks/oracle, injector, agent)
 ├── .gitignore
 └── README.md
 ```

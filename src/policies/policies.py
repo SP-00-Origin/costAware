@@ -5,14 +5,9 @@ This is THE core experimental variable. Only this changes between runs.
 """
 from typing import Tuple, Any, Dict, Optional
 
-# High-risk tools — Policy D always verifies after these
-HIGH_RISK_TOOLS = {
-    "create_purchase_order",
-    "modify_order",
-    "approve_order",
-    "release_order",
-    "cancel_order",
-}
+# High-risk tools — Policy D always verifies after these.
+# Single source of truth: the risk tags in the tool registry.
+from ..environment.tools import HIGH_RISK_TOOLS, MEDIUM_RISK_TOOLS
 
 CONF_THRESHOLD = 0.6   # below this → verify (Policy D/E)
 
@@ -66,7 +61,7 @@ def should_verify(
         if _schema_fail(tool_name, result):
             return True, "schema_fail"
         # Trigger 3: low confidence (if available in result metadata)
-        confidence = result.get("_confidence", 1.0)
+        confidence = result.get("_confidence", 1.0) if isinstance(result, dict) else 1.0
         if confidence < CONF_THRESHOLD:
             return True, "low_confidence"
         # Check verdict cache first
@@ -94,8 +89,8 @@ def _schema_fail(tool_name: str, result: dict) -> bool:
         return True
     if "parse_error" in result:
         return True
-    if "error" in result:
-        return True   # tool returned an error — always verify
+    if "error" in result or result.get("timeout"):
+        return True   # tool returned an error / timed out — always verify
     # Tool-specific checks
     if tool_name == "check_budget":
         required = {"allocated", "spent", "reserved", "remaining"}
@@ -121,13 +116,13 @@ def _risk_score(tool_name: str, result: dict, history: list) -> float:
     # Tool tier
     if tool_name in HIGH_RISK_TOOLS:
         score += 0.5
-    elif tool_name in {"request_discount", "request_approval"}:
+    elif tool_name in MEDIUM_RISK_TOOLS:
         score += 0.25
     # Schema fail
     if _schema_fail(tool_name, result):
         score += 0.4
     # Confidence
-    confidence = result.get("_confidence", 1.0)
+    confidence = result.get("_confidence", 1.0) if isinstance(result, dict) else 1.0
     score += (1.0 - confidence) * 0.2
     return min(score, 1.0)
 

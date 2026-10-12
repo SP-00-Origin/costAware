@@ -26,3 +26,5 @@ results/*.csv
 # Python tools
 .pytest_cache/
 .mypy_cache/
+# Agent run trajectories
+logs/**/*.jsonl
