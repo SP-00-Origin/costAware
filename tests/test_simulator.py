@@ -136,6 +136,16 @@ def test_discount_floor_and_single_use(sim):
     assert po["unit_price"] == 440.0
 
 
+def test_discount_rejects_non_discounts_without_using_it(sim):
+    """A price at/above current or <= 0 is rejected and does not burn the one-time discount."""
+    assert sim.request_discount("Q1", 480.0)["success"] is False   # equal to current
+    assert sim.request_discount("Q1", 600.0)["success"] is False   # a price increase
+    assert sim.request_discount("Q1", 0)["success"] is False
+    assert sim.request_discount("Q1", -5)["success"] is False
+    assert sim.state.quotes["Q1"].unit_price == 480.0
+    assert sim.request_discount("Q1", 440.0)["success"] is True     # still available
+
+
 def test_policy_violations_go_through(sim):
     """Suspended vendor / expired quote orders are accepted; the oracle judges them."""
     assert "po_id" in sim.create_purchase_order("PROJ-A", "Q2", 10)   # suspended vendor

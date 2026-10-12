@@ -214,6 +214,11 @@ class ProcurementSimulator:
         if q.discount_used:
             return {"success": False, "reason": "Discount already negotiated for this quote",
                     "unit_price": q.unit_price}
+        if not isinstance(requested_price, (int, float)) or requested_price <= 0:
+            return {"success": False, "reason": "Requested price must be greater than 0"}
+        if requested_price >= q.unit_price:
+            return {"success": False, "reason": "Requested price is not below the current price",
+                    "unit_price": q.unit_price}
         floor = round(q.unit_price * 0.90, 2)
         if requested_price >= floor:
             q.unit_price    = float(requested_price)
