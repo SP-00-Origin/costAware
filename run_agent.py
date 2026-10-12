@@ -28,6 +28,8 @@ from src.environment.tasks import load_tasks  # noqa: E402
 
 
 def main(argv=None):
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--task", default="T01", help="task id, comma-separated ids, or 'all'")
     p.add_argument("--provider", choices=["anthropic", "scripted"], default="anthropic")

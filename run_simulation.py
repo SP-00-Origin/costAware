@@ -26,6 +26,8 @@ from src.policies.policies import should_verify  # noqa: E402
 
 
 def run_experiment(task_id: str = "T01", policy: str = "D", fault_seed: int = 42, fault_rate: float = 0.25):
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     task = get_task(task_id)
     print(f"\n{'=' * 64}\n  {task.id} ({task.tier}, {task.family}) | Policy={policy} | "
           f"Seed={fault_seed} | Rate={fault_rate}\n{'=' * 64}")
