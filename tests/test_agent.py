@@ -137,6 +137,19 @@ def test_anthropic_provider_requires_key(monkeypatch):
         make_llm("anthropic")
 
 
+def test_gemini_provider_requires_key(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    with pytest.raises(RuntimeError):
+        make_llm("gemini")
+
+
+def test_gemini_provider_initializes_with_key(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test_gemini_key_123")
+    llm = make_llm("gemini")
+    assert llm is not None
+
+
 # ─── Information boundary: agent sees observed, never true ──────────────────
 
 def test_agent_only_sees_observed_results():

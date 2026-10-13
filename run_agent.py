@@ -6,12 +6,14 @@ Examples
   # Dry run, no API key: scripted agent replays each reference solution (clean env)
   python run_agent.py --task all --provider scripted
 
-  # Real Claude agent on clean tasks (Phase 4 exit check)
-  export ANTHROPIC_API_KEY=...
+  # Real Gemini agent on clean tasks (GEMINI_API_KEY in .env)
+  python run_agent.py --task all --provider gemini
+
+  # Real Claude agent on clean tasks
   python run_agent.py --task all --provider anthropic
 
-  # One task with faults under Policy D, showing true vs observed results
-  python run_agent.py --task T08 --provider anthropic --policy D --fault-rate 0.25 --seed 3 -v
+  # One task with faults under Policy D with Gemini Flash
+  python run_agent.py --task T08 --provider gemini --policy D --fault-rate 0.25 --seed 3 -v
 
 Trajectories are written to logs/<run-name>/ as one JSONL file per episode.
 """
@@ -20,10 +22,14 @@ import sys
 import time
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.agent import DEFAULT_MAX_STEPS, format_episode, make_llm, run_episode, save_episode  # noqa: E402
-from src.agent.llm import DEFAULT_MODEL  # noqa: E402
+from src.agent.llm import DEFAULT_MODEL, get_default_model  # noqa: E402
 from src.environment.tasks import load_tasks  # noqa: E402
 
 
@@ -32,8 +38,8 @@ def main(argv=None):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--task", default="T01", help="task id, comma-separated ids, or 'all'")
-    p.add_argument("--provider", choices=["anthropic", "scripted"], default="anthropic")
-    p.add_argument("--model", default=None, help=f"Claude model id (default {DEFAULT_MODEL})")
+    p.add_argument("--provider", choices=["gemini", "anthropic", "openai", "scripted"], default="gemini")
+    p.add_argument("--model", default=None, help="LLM model id (default: gemini-3.1-flash-lite for gemini, claude-haiku-4-5 for anthropic)")
     p.add_argument("--policy", choices=list("ABCD"), default="A")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--fault-rate", type=float, default=0.0, help="0 = clean environment")
@@ -51,7 +57,7 @@ def main(argv=None):
             p.error(f"unknown task id(s): {sorted(missing)}")
 
     log_dir = Path(args.log_dir or Path("logs") / time.strftime("run_%Y%m%d_%H%M%S"))
-    model_name = "scripted-reference" if args.provider == "scripted" else (args.model or DEFAULT_MODEL)
+    model_name = "scripted-reference" if args.provider == "scripted" else (args.model or get_default_model(args.provider))
 
     results = []
     for task in tasks:
