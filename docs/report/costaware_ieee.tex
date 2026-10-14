@@ -1,0 +1,516 @@
+% ============================================================================
+% CostAware — IEEE conference-format report
+% Compile on Overleaf (IEEEtran is built in) or locally:
+%   pdflatex costaware_ieee && bibtex costaware_ieee && pdflatex costaware_ieee && pdflatex costaware_ieee
+%
+% Every number in Section V is produced by:
+%   python scripts/trigger_coverage.py --seeds 50 --rate 0.25 --json results/tables/trigger_coverage_r025.json
+% Sections VI–VII describe experiments that have NOT been run yet; do not add
+% result numbers there until the harness (Phases 5–8) produces them.
+% ============================================================================
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{makecell}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+
+\newcommand{\yes}{\checkmark}
+\newcommand{\no}{--}
+\newcommand{\pt}{$\circ$}
+
+\begin{document}
+
+\title{Which Faults Does Adaptive Verification Notice?\\
+A Matched-Fault Testbed for Cost-Aware Verification\\
+in Long-Horizon Tool-Using LLM Agents}
+
+% TODO: add co-authors (team members on SP-00-Origin/costAware) and supervisor.
+\author{\IEEEauthorblockN{Krish Sharma}
+\IEEEauthorblockA{\textit{Department of Computer Science and Engineering}\\
+\textit{BML Munjal University}\\
+Gurugram, India\\
+krish.sharma.24cse@bmu.edu.in}
+}
+
+\maketitle
+
+% ----------------------------------------------------------------------------
+\begin{abstract}
+Tool-using large language model (LLM) agents act on observations returned by external
+tools, and a single corrupted observation can propagate into an irreversible
+state-changing action. Verifying every step is expensive, so recent systems verify
+\emph{selectively}, typically triggering on the risk tier of the tool being called or on
+malformed tool output. We ask a question that prior selective-verification work does not
+isolate: \emph{which kinds of tool faults do such triggers actually notice?} We present
+CostAware, a deterministic testbed in which an agent completes long-horizon enterprise
+procurement tasks through 17 risk-tiered tools while a seeded injector corrupts tool
+outputs with eight fault types. Its key design property is \emph{matched faults}: faults
+are keyed on the tool call itself, so the same agent action receives the same fault under
+every verification policy, regardless of how many extra verification calls a policy makes.
+A deterministic, LLM-free oracle judges the hidden true state. In an LLM-free trigger-coverage
+analysis over 6{,}950 tool calls (20 tasks $\times$ 50 seeds), a risk-and-schema adaptive policy
+verifies 43.7\% of steps and reaches 63.1\% of faulted steps, against 39.8\% for a fixed
+every-third-step schedule at a similar 38.1\% rate. However, its content-based trigger fires on
+0\% of \emph{silent} faults (well-formed but wrong values, stale records, or wrong statuses);
+on these it does no better than the fixed schedule (42.1\% vs.\ 44.4\%) and is worse on two
+fault types. We release the testbed and an evaluation protocol for comparing never-, always-,
+scheduled-, and adaptively-verifying agents on reliability versus cost.
+\end{abstract}
+
+\begin{IEEEkeywords}
+LLM agents, tool use, verification, fault injection, cost-aware inference, reliability
+\end{IEEEkeywords}
+
+% ----------------------------------------------------------------------------
+\section{Introduction}
+
+LLM agents increasingly execute multi-step workflows through tool calls: they query
+records, compare options, and then commit state-changing actions such as creating or
+releasing a purchase order. The agent's only view of the world is what the tools return.
+If a tool returns a stale quote, a flipped vendor-suspension flag, or a mis-reported budget,
+the agent can reason correctly and still act wrongly. Recent fault-injection studies
+show that this is common: corrupted tool outputs substantially reduce task success
+\cite{gupta2026reliabilitybench,wang2026agentnoisebench,agentchaos2026,zhu2026toolmaze}, a single
+wrong parameter propagates to a wrong final answer most of the time \cite{gurram2026agentprop},
+and agents notice explicit errors far more readily than plausible wrong values
+\cite{kraishan2026loud}.
+
+Verification---re-checking an observation or an action before relying on it---is the
+obvious remedy, but it is not free. Each verifier call costs tokens and latency, and
+enforcing checks on every step imposes a measurable ``verifier tax''
+\cite{sah2026verifiertax}. A growing line of work therefore verifies selectively: gating
+critique on action ambiguity \cite{park2026sag}, placing verifiers only on error-prone
+workflow nodes \cite{ro2025sherlock}, re-checking only before backend writes
+\cite{chen2026reconsider}, or escalating from a cheap deterministic check to an LLM judge
+\cite{sieve2025,safeharness2026,verificationlayer2026}.
+
+These triggers share an implicit assumption: that the signals they watch---the risk of the
+tool being called, or whether its output is well formed---are correlated with the
+observations that are actually wrong. This paper tests that assumption directly. Our
+contributions are:
+
+\begin{enumerate}
+\item \textbf{A controlled procurement testbed} (Section~\ref{sec:testbed}): a deterministic
+simulator with 17 risk-tiered tools, 20 tasks in three difficulty tiers, and an LLM-free
+oracle. The simulator enforces workflow integrity but deliberately \emph{permits} policy
+violations (e.g., ordering from a suspended vendor), so a misled agent can actually fail.
+\item \textbf{A matched-fault protocol} (Section~\ref{sec:faults}): faults are derived from a
+hash of the seed, tool, arguments, and call occurrence, so verification policies that make
+different numbers of extra calls still face identical faults on identical agent actions,
+and every episode can be replayed exactly.
+\item \textbf{A trigger-coverage analysis} (Section~\ref{sec:coverage}) showing that
+risk-tier and schema triggers are effectively blind to silent value faults: the content
+trigger fires on none of them, and the adaptive policy covers them no better than a fixed
+schedule.
+\item \textbf{An evaluation protocol} (Section~\ref{sec:protocol}) for comparing verification
+policies A--E on reliability versus cost, including signal ablations and a rate-matched
+random-verification control.
+\end{enumerate}
+
+We do not yet report end-to-end success rates of LLM agents; Section~\ref{sec:protocol}
+describes those experiments, and Section~\ref{sec:limits} states what the present results do
+and do not show.
+
+% ----------------------------------------------------------------------------
+\section{Related Work}
+\label{sec:related}
+
+\textbf{Fault injection for tool-using agents.}
+ReliabilityBench applies chaos-engineering faults (timeouts, rate limits, partial responses,
+schema drift) and reports a reliability surface over repetition, perturbation, and fault
+intensity \cite{gupta2026reliabilitybench}. AgentNoiseBench injects user- and tool-side noise
+into existing benchmarks \cite{wang2026agentnoisebench}; AgentChaos injects faults at the LLM
+API layer \cite{agentchaos2026}; ToolMaze distinguishes explicit/implicit and
+transient/permanent tool failures and measures recovery cost \cite{zhu2026toolmaze};
+AgentProp-Bench measures how an injected wrong parameter propagates \cite{gurram2026agentprop}.
+Kraishan finds that agents respond to the error channel rather than to content, so
+in-format faults pass unnoticed \cite{kraishan2026loud}, and SSCBench argues that fault-injection
+results should report whether refuting evidence was available before first use
+\cite{he2026sscbench}. These works \emph{measure} agent robustness; none compares verification
+\emph{policies} under faults held fixed across policies, which is our focus. Our fault
+taxonomy overlaps with theirs (timeouts, malformed output, wrong values) and we do not claim
+it as a contribution.
+
+\textbf{Selective verification and critique.}
+SAG gates an external critic on action-level ambiguity (entropy and top-2 margin) and
+improves success per token over no-critique and always-critique agents
+\cite{park2026sag}; it is the closest work in spirit, but it targets embodied decision
+benchmarks without tool-output corruption. Sherlock places verifiers on error-prone workflow
+nodes identified by counterfactual fault analysis \cite{ro2025sherlock}. AVA allocates compute
+across search, sampling, and verification cascades under a budget for reasoning tasks
+\cite{patel2026ava}, and a communication-theoretic view maps retry, voting, and critique onto
+classical reliability operators with a cost-aware router \cite{omidvar2026comm}. Earlier
+self-correction work (Reflexion \cite{shinn2023reflexion}, Self-Refine
+\cite{madaan2023selfrefine}, CRITIC \cite{gou2024critic}) verifies uniformly, and intrinsic
+self-correction without external feedback is known to be unreliable \cite{huang2024cannot}.
+
+\textbf{Guards on state-changing actions.}
+Write-triggered reconsideration re-checks proposed backend writes on $\tau^2$-bench
+\cite{chen2026reconsider}; SIEVE and SafeHarness escalate from deterministic checks to an LLM
+adjudicator \cite{sieve2025,safeharness2026}; RACG gates which risk-tiered tools are exposed
+at all \cite{racg2026}; and a verification wrapper with post-conditions and idempotency keys
+addresses non-atomic failures such as timeouts after dispatch \cite{mansoor2026verifiedtools}.
+Policy D in this paper is an instance of this family (risk-tier plus schema trigger), which is
+precisely why measuring its blind spots is useful.
+
+\textbf{Cost-aware cascades and environments.}
+Cheap-then-expensive cascades originate in FrugalGPT \cite{chen2023frugalgpt} and have online,
+regret-bounded variants \cite{omvv2026}. Enterprise and business environments for agents
+include $\tau$-bench \cite{yao2024taubench}, EnterpriseBench \cite{enterprisebench}, and
+Vending-Bench \cite{backlund2025vending}; ToolEmu emulates risky tool executions
+\cite{ruan2024toolemu}.
+
+Table~\ref{tab:positioning} summarizes the positioning. The individual ingredients exist; the
+combination of matched faults across verification policies, a stateful environment where
+faults can cause irreversible errors, and an LLM-free oracle is, to our knowledge, not
+covered by prior work.
+
+\begin{table}[t]
+\caption{Positioning against the closest prior work (from published abstracts).
+\yes: central; \pt: partial; \no: not addressed.}
+\label{tab:positioning}
+\centering
+\setlength{\tabcolsep}{3pt}
+\footnotesize
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+Work & \makecell{Tool-\\output\\faults} & \makecell{State-\\changing\\actions} & \makecell{Compares\\verify\\policies} & \makecell{Faults\\matched\\across\\policies} & \makecell{Non-LLM\\oracle} & \makecell{Cost\\account-\\ing} \\
+\midrule
+ReliabilityBench \cite{gupta2026reliabilitybench} & \yes & \pt & \no & \no & \yes & \yes \\
+ToolMaze \cite{zhu2026toolmaze} & \yes & \pt & \no & \no & \pt & \yes \\
+Loud/Quiet \cite{kraishan2026loud} & \yes & \pt & \no & \no & \pt & \no \\
+SAG \cite{park2026sag} & \no & \pt & \yes & \no & \yes & \yes \\
+Sherlock \cite{ro2025sherlock} & \pt & \no & \yes & \no & \pt & \yes \\
+Reconsider \cite{chen2026reconsider} & \no & \yes & \pt & \no & \yes & \pt \\
+Verified calls \cite{mansoor2026verifiedtools} & \yes & \yes & \pt & \no & \pt & \no \\
+\textbf{This work} & \yes & \yes & \yes & \yes & \yes & \yes \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ----------------------------------------------------------------------------
+\section{Problem Formulation}
+\label{sec:problem}
+
+An episode runs for at most $T$ steps. At step $t$ the agent, given goal $g$ and history
+$h_t$, emits a tool call $a_t$. The environment produces a true result $r_t$ and
+updates hidden state $s_{t+1}$; the agent instead observes $o_t = F_\sigma(a_t, r_t)$,
+where $F_\sigma$ is a seeded fault channel that returns $r_t$ unchanged or a corrupted version
+of it. A verification policy $\pi_v(a_t, o_t, h_t) \in \{0,1\}$ decides whether to invoke a
+verifier, which may trigger recovery (re-calling the tool or re-planning). The episode
+succeeds if the oracle $\mathcal{O}(s_T) = 1$.
+
+Let $c_v$ be the cost of one verification (tokens, latency, calls). For a policy class
+$\Pi$, the goal is
+\begin{equation}
+\max_{\pi_v \in \Pi} \; \Pr[\mathcal{O}(s_T)=1]
+\quad \text{s.t.} \quad
+\mathbb{E}\Big[\tfrac{1}{T}\textstyle\sum_t \pi_v(a_t,o_t,h_t)\Big] \le \rho ,
+\label{eq:objective}
+\end{equation}
+i.e., the best reliability at a verification rate of at most $\rho$. Sweeping $\rho$ traces
+a reliability--overhead frontier. A necessary condition for verification to help on a
+faulted step is that $\pi_v$ fires on it; we call the fraction of faulted steps on which a
+policy fires its \emph{trigger recall}. Trigger recall upper-bounds the benefit a perfect
+verifier could deliver under that policy, and it can be measured without any LLM.
+
+% ----------------------------------------------------------------------------
+\section{The CostAware Testbed}
+\label{sec:testbed}
+
+\subsection{Procurement Simulator and Tools}
+The simulator models nine entity types: vendors (approval, suspension), components,
+supplier quotes (price, expiry, status), projects with procurement rules, budgets
+(allocated, spent, reserved), purchase orders (POs), approvals, invoices, and shipments.
+Agents act through 17 tools, each tagged with a risk tier in a single registry that also
+supplies JSON argument schemas for tool calling (Table~\ref{tab:tools}).
+
+\begin{table}[t]
+\caption{Tool registry by risk tier.}
+\label{tab:tools}
+\centering
+\footnotesize
+\begin{tabular}{@{}p{0.17\columnwidth}p{0.75\columnwidth}@{}}
+\toprule
+Tier & Tools \\
+\midrule
+Low (read) & search\_vendors, get\_vendor\_details, check\_vendor\_status, get\_quotes,
+check\_quote\_validity, check\_budget, check\_existing\_orders, compare\_quotes, check\_invoice \\
+Medium & request\_discount, request\_approval, dispute\_invoice \\
+High & create\_purchase\_order, modify\_order, approve\_order, release\_order, cancel\_order \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two design choices make faults consequential. First, the simulator enforces \emph{workflow}
+rules (unknown identifiers, illegal state transitions, releasing an order above the
+approval threshold without a valid approval) but does not block \emph{policy} mistakes such
+as ordering from a suspended vendor, on an expired quote, beyond budget, or twice. Those
+actions succeed and are failed later by the oracle; if the simulator blocked them, a misled
+agent could never fail and verification policies would be indistinguishable. Second, POs
+are priced from quotes and identifiers are sequential, so reruns are bit-identical.
+Modifying an order invalidates its approval, creating long-range dependencies.
+
+\subsection{Tasks and Oracle}
+The 20 tasks span 11 families (e.g., vendor status, quote conflict, budget constraint,
+discount negotiation, approval workflow, PO modification and cancellation, invoice
+mismatch, duplicate prevention): 7 easy, 8 medium, and 5 hard. Reference solutions range
+from 2 to 14 tool calls (139 in total). Each task specifies a goal, an initial state, an
+expected final state, a reference solution that must pass, and at least one negative
+trajectory that must fail for the intended reason.
+
+The oracle is pure Python and is tested to import no LLM library. It applies always-on
+invariants (budgets within limits, every active order placed with a vendor in good standing,
+quotes valid at order time, no duplicate active orders) and per-task checks on required
+orders (vendor, quantity, status, price, valid approval), invoice states, and budget
+reservations. Orders are located by project and component rather than by PO identifier.
+
+\subsection{Fault Model and Matched Faults}
+\label{sec:faults}
+The injector applies one of eight fault types (Table~\ref{tab:faults}) to a tool's
+observed result with probability equal to the fault rate. Faults reach nested fields (e.g.,
+one quote inside a list) and a fault that would not change the result is skipped, so every
+logged fault is a visible corruption. A timeout on a write tool still performs the write,
+so a naive retry can create a duplicate order---the non-atomic failure studied in
+\cite{mansoor2026verifiedtools}.
+
+\begin{table}[t]
+\caption{Fault types and their observable signature.}
+\label{tab:faults}
+\centering
+\footnotesize
+\begin{tabular}{@{}p{0.26\columnwidth}p{0.66\columnwidth}@{}}
+\toprule
+Fault & Effect on observed result \\
+\midrule
+wrong\_value & numeric field off by 10--30\% \\
+stale\_info & older view of the same record \\
+contradictory & boolean flag flipped (e.g., suspended) \\
+malformed\_output & object replaced by a truncated raw string \\
+missing\_field & a required key removed \\
+timeout & no answer (write may still have happened) \\
+incorrect\_status & status replaced by a plausible wrong one \\
+corrupted\_obs & numeric field zeroed \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\emph{Matched faults.} A shared random stream would make faults depend on how many calls
+preceded them, so a policy that verifies more (and therefore calls more tools) would face
+different faults. Instead, each call's fault is derived from
+$\mathrm{SHA256}(\sigma \,\|\, \text{tool} \,\|\, \text{canonical args} \,\|\, k)$, where $k$ is the
+occurrence count of that exact call. The same agent action therefore receives the same fault
+under every policy, while a recovery re-call is an independent draw. A replay module
+re-executes a logged trajectory and reports any divergence from the recorded observations.
+
+\subsection{Agent}
+The agent is a LangGraph \cite{langgraph} state machine:
+\textit{init} $\rightarrow$ \textit{agent} $\rightarrow$ \textit{tool\_exec} $\rightarrow$
+\textit{fault\_injection} $\rightarrow$ \textit{policy\_router} $\rightarrow$ \textit{observe}
+$\rightarrow$ (\textit{agent} $|$ \textit{finalize}). It issues one structured tool call per turn
+in the ReAct style \cite{yao2023react}, ends via a \texttt{finish} tool, a step limit (30), or a
+recursion backstop, and sees only observed results; true results reach only the logger and
+oracle. Every step is logged as JSONL with true and observed results, the injected fault, and
+the policy decision with its trigger reason.
+
+\subsection{Verification Policies}
+\begin{itemize}
+\item \textbf{A (never)}: lower bound on cost and reliability.
+\item \textbf{B (always)}: verify after every step.
+\item \textbf{C (fixed schedule)}: verify every third step.
+\item \textbf{D (adaptive)}: verify if the tool is high-risk (tool-based trigger), or the
+observation fails a deterministic schema/sanity check---error or timeout, unparsable output,
+missing budget fields, negative remaining budget, a vendor both approved and suspended, or a
+PO creation without an identifier (content-based trigger). A third, confidence-based trigger
+is specified but not yet wired to a model signal (Section~\ref{sec:limits}).
+\item \textbf{E (budget-controlled)}: a continuous risk score compared to a threshold that an
+EWMA controller adjusts toward a target verification rate $\rho$.
+\end{itemize}
+
+% ----------------------------------------------------------------------------
+\section{Trigger-Coverage Analysis}
+\label{sec:coverage}
+
+\subsection{Setup}
+To separate \emph{when} a policy verifies from \emph{how well} a verifier judges, we replay
+each task's reference solution open-loop under fault injection and record, for every step,
+whether each policy would trigger. Because faults are matched, all four policies see
+identical faults. We use 50 seeds per task at fault rate 0.25, giving 6{,}950 tool calls of
+which 1{,}764 (25.4\%) are faulted. Policy D's triggers are attributed to the tool-based or
+content-based rule that fired first. No LLM is involved; the analysis is reproduced by
+\texttt{scripts/trigger\_coverage.py}.
+
+\subsection{Results}
+
+\begin{table}[t]
+\caption{Verification rate and trigger recall (rate 0.25, 6{,}950 steps).}
+\label{tab:overall}
+\centering
+\footnotesize
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Policy & Verify rate & Recall (faulted) & Verify rate (clean) \\
+\midrule
+A (never) & 0.0\% & 0.0\% & 0.0\% \\
+B (always) & 100.0\% & 100.0\% & 100.0\% \\
+C (every 3rd) & 38.1\% & 39.8\% & 37.6\% \\
+D (adaptive) & 43.7\% & 63.1\% & 37.1\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\caption{Trigger recall by fault type (rate 0.25). ``D content'' counts only D's
+content-based trigger; the remainder of D's recall comes from the high-risk tool rule.}
+\label{tab:perfault}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llrrrr@{}}
+\toprule
+Group & Fault & $n$ & C & D & D content \\
+\midrule
+Loud    & malformed\_output & 330 & 41.2 & 100.0 & 61.8 \\
+        & timeout           & 312 & 37.5 & 100.0 & 75.0 \\
+\midrule
+Partial & missing\_field    & 376 & 33.2 & 42.3 & 8.0 \\
+        & contradictory     & 135 & 39.3 & 40.7 & 13.3 \\
+\midrule
+Silent  & stale\_info       & 161 & 41.6 & 68.3 & 0.0 \\
+        & incorrect\_status & 168 & 41.7 & 47.0 & 0.0 \\
+        & wrong\_value      & 139 & 46.8 & 30.9 & 0.0 \\
+        & corrupted\_obs    & 143 & 48.3 & 17.5 & 0.0 \\
+\midrule
+\multicolumn{2}{@{}l}{Silent (pooled)} & 611 & 44.4 & 42.1 & 0.0 \\
+\multicolumn{2}{@{}l}{Loud (pooled)}   & 642 & 39.4 & 100.0 & 68.2 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:overall} shows the headline comparison. At a verification rate only 5.6 points
+above the fixed schedule, Policy D reaches 63.1\% of faulted steps versus 39.8\%, while its
+rate on clean steps (37.1\%) is no higher than C's. Taken alone, this would suggest D is
+a strictly better allocation of verification budget.
+
+Table~\ref{tab:perfault} shows where that advantage comes from. D catches every
+\emph{loud} fault---timeouts and malformed output surface as errors or parse failures---and
+these two types account for 642 of the 1{,}764 faulted steps. On the four \emph{silent} fault
+types, which return well-formed results with wrong content, D's content trigger fires
+\emph{zero} times. D still verifies some of these steps, but only when the faulted call
+happens to be a high-risk tool; pooled over silent faults its recall (42.1\%) is no better
+than the fixed schedule (44.4\%). On \texttt{wrong\_value} and \texttt{corrupted\_obs} it is
+substantially worse (30.9\% vs.\ 46.8\%, 17.5\% vs.\ 48.3\%), because these faults mostly hit
+low-risk read tools such as \texttt{check\_budget} and \texttt{get\_quotes}, which D never
+verifies unless their output is malformed. Across all faults, only 27.6\% of faulted steps are
+noticed by D's content trigger at all.
+
+The pattern is stable across fault rates: at 0.10 and 0.40, D's recall is 61.6\% and 64.9\%,
+its content trigger again fires on 0\% of silent faults, and the fixed schedule again exceeds
+D on \texttt{wrong\_value} and \texttt{corrupted\_obs}.
+
+\subsection{Interpretation}
+The finding mirrors the agent-side result of Kraishan \cite{kraishan2026loud}---agents react to
+the error channel, not to content---one level up: \emph{policies} built from risk tiers and
+schema checks also react to the error channel. A silent fault on a read tool (a mis-reported
+budget, a stale quote) is the input that leads to a wrong high-risk write two steps later,
+and the risk-tier rule verifies the write but not the read that corrupted it. Whether
+verifying the write is sufficient depends on the verifier re-querying the corrupted fact,
+which is an empirical question for the end-to-end experiments. The analysis suggests two
+design implications: (i) adaptive policies need a content-sensitive signal for in-format
+faults, e.g., cross-observation consistency checks or model uncertainty; and (ii) risk should
+be attributed to the \emph{reads that feed} a high-risk write, not only to the write.
+
+% ----------------------------------------------------------------------------
+\section{Evaluation Protocol}
+\label{sec:protocol}
+
+The following experiments are specified and supported by the harness but have not yet been
+run; we state them so that hypotheses are fixed before results are seen.
+
+\textbf{Design.} One agent model, policies A--E, 20 tasks, matched seeds, fault rate 0.25
+with a sweep over $\{0.10, 0.25, 0.40\}$, and a clean (rate 0) control. The verifier and the
+recovery protocol (re-call once, then re-plan with the flagged concern, then record an
+unrecovered fault) are identical across policies; only the decision of \emph{when} to verify
+changes.
+
+\textbf{Metrics.} Task success (oracle pass rate); fault recovery rate (faulted episodes that
+pass); error propagation (faulted episodes that fail); verification overhead (verifier calls per
+action); tokens, dollar cost, and latency per task; and the reliability--overhead frontier of
+Eq.~\eqref{eq:objective}. Verifier precision and recall are measured against the logged
+ground-truth fault labels.
+
+\textbf{Hypotheses.}
+H1: Policy A's failure rate grows with horizon length and fault rate.
+H2: Policy B improves reliability over A at the highest overhead.
+H3: Policy D approaches B's reliability at lower overhead.
+H4: The high-risk and schema triggers each contribute to D's reliability (signal ablation).
+H5 (from Section~\ref{sec:coverage}): D's reliability advantage over C is concentrated on loud
+faults and vanishes or reverses on silent faults; adding a content-sensitive trigger closes
+this gap.
+
+\textbf{Controls.} A random-verification policy matched to D's per-task verification rate
+separates the value of D's \emph{signals} from the value of its \emph{budget}. Results will be
+reported with 95\% bootstrap confidence intervals over seeds and paired tests across policies,
+which matched faults make valid.
+
+% ----------------------------------------------------------------------------
+\section{Limitations and Threats to Validity}
+\label{sec:limits}
+
+\textbf{Open-loop replay.} Section~\ref{sec:coverage} replays fixed reference solutions; an LLM
+agent will take different paths, and its own reactions to faults (e.g., re-querying) are not
+captured. Trigger recall bounds, but does not measure, the reliability benefit of
+verification.
+
+\textbf{Triggering is not detection.} A triggered verifier must still recognize the fault.
+Self-verification without external evidence is unreliable \cite{huang2024cannot}, so end-to-end
+benefit may be well below trigger recall.
+
+\textbf{Confidence trigger not implemented.} D's specified low-confidence trigger reads a
+confidence field that no tool or model currently supplies, so the D evaluated here is the
+two-signal (risk + schema) variant. A logprob- or entropy-based signal \cite{park2026sag} may
+recover some silent-fault coverage; this is part of H5.
+
+\textbf{Synthetic environment and fault mix.} The world is synthetic and small (20 tasks). The
+effective mix over-represents faults that always apply (malformed, missing field, timeout)
+relative to those requiring a particular field. Per-type results are reported to make this
+visible; the pooled numbers should be read with it in mind.
+
+\textbf{Relation to prior work.} The literature on this topic is moving quickly (several of the
+works cited appeared in the last three months); positioning in Table~\ref{tab:positioning} is
+based on published abstracts and should be re-checked against full texts.
+
+% ----------------------------------------------------------------------------
+\section{Conclusion}
+CostAware isolates the question of \emph{when} a tool-using agent should verify, by holding
+faults fixed across verification policies in a stateful environment judged by a deterministic
+oracle. An LLM-free analysis already yields a concrete result: a risk-tier and schema-based
+adaptive policy looks markedly more efficient than a fixed schedule, but its advantage comes
+entirely from faults that announce themselves; on silent, in-format faults it is no better
+than verifying every third step. The planned end-to-end experiments test whether this gap
+persists once an LLM verifier and recovery are in the loop, and whether content-sensitive
+signals close it.
+
+% ----------------------------------------------------------------------------
+\section*{Code and Data Availability}
+Simulator, tasks, injector, oracle, agent, and analysis scripts:
+\url{https://github.com/SP-00-Origin/costAware}.
+
+\section*{Acknowledgment}
+% IEEE requires disclosing AI-generated content (text, figures, code) in the acknowledgments,
+% naming the system and the sections it was used for. Edit to reflect actual use.
+The authors used an AI assistant (Claude, Anthropic) to help survey related work and draft
+portions of this manuscript; all content was reviewed and verified by the authors, who take
+full responsibility for it.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

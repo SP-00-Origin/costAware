@@ -1,0 +1,91 @@
+{
+  "seeds": 50,
+  "rate": 0.25,
+  "steps": 6950,
+  "faulted_steps": 1764,
+  "effective_fault_rate": 0.2538129496402878,
+  "verify_rate": {
+    "A": 0.0,
+    "B": 1.0,
+    "C": 0.381294964028777,
+    "D": 0.4368345323741007
+  },
+  "fault_recall": {
+    "A": 0.0,
+    "B": 1.0,
+    "C": 0.3979591836734694,
+    "D": 0.6309523809523809
+  },
+  "clean_verify_rate": {
+    "A": 0.0,
+    "B": 1.0,
+    "C": 0.3756266872348631,
+    "D": 0.3708060161974547
+  },
+  "per_fault": {
+    "wrong_value": {
+      "count": 139,
+      "recall_A": 0.0,
+      "recall_B": 1.0,
+      "recall_C": 0.4676258992805755,
+      "recall_D": 0.30935251798561153,
+      "content_recall_D": 0.0
+    },
+    "stale_info": {
+      "count": 161,
+      "recall_A": 0.0,
+      "recall_B": 1.0,
+      "recall_C": 0.4161490683229814,
+      "recall_D": 0.6832298136645962,
+      "content_recall_D": 0.0
+    },
+    "contradictory": {
+      "count": 135,
+      "recall_A": 0.0,
+      "recall_B": 1.0,
+      "recall_C": 0.3925925925925926,
+      "recall_D": 0.4074074074074074,
+      "content_recall_D": 0.13333333333333333
+    },
+    "malformed_output": {
+      "count": 330,
+      "recall_A": 0.0,
+      "recall_B": 1.0,
+      "recall_C": 0.4121212121212121,
+      "recall_D": 1.0,
+      "content_recall_D": 0.6181818181818182
+    },
+    "missing_field": {
+      "count": 376,
+      "recall_A": 0.0,
+      "recall_B": 1.0,
+      "recall_C": 0.3324468085106383,
+      "recall_D": 0.4228723404255319,
+      "content_recall_D": 0.0797872340425532
+    },
+    "timeout": {
+      "count": 312,
+      "recall_A": 0.0,
+      "recall_B": 1.0,
+      "recall_C": 0.375,
+      "recall_D": 1.0,
+      "content_recall_D": 0.75
+    },
+    "incorrect_status": {
+      "count": 168,
+      "recall_A": 0.0,
+      "recall_B": 1.0,
+      "recall_C": 0.4166666666666667,
+      "recall_D": 0.47023809523809523,
+      "content_recall_D": 0.0
+    },
+    "corrupted_obs": {
+      "count": 143,
+      "recall_A": 0.0,
+      "recall_B": 1.0,
+      "recall_C": 0.4825174825174825,
+      "recall_D": 0.17482517482517482,
+      "content_recall_D": 0.0
+    }
+  }
+}
