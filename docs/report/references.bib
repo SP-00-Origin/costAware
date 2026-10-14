@@ -1,0 +1,246 @@
+% ============================================================================
+% references.bib — CostAware IEEE report
+% Entries marked "% VERIFY" were checked only at abstract level, or their full
+% author list was not visible; open the paper and confirm before submission.
+% ============================================================================
+
+% ---------- Foundational agent / self-correction work ----------
+@inproceedings{yao2023react,
+  author    = {Shunyu Yao and Jeffrey Zhao and Dian Yu and Nan Du and Izhak Shafran and Karthik Narasimhan and Yuan Cao},
+  title     = {{ReAct}: Synergizing Reasoning and Acting in Language Models},
+  booktitle = {Proc. Int. Conf. Learning Representations (ICLR)},
+  year      = {2023}
+}
+
+@inproceedings{shinn2023reflexion,
+  author    = {Noah Shinn and Federico Cassano and Ashwin Gopinath and Karthik Narasimhan and Shunyu Yao},
+  title     = {Reflexion: Language Agents with Verbal Reinforcement Learning},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2023}
+}
+
+@inproceedings{madaan2023selfrefine,
+  author    = {Aman Madaan and others},
+  title     = {Self-Refine: Iterative Refinement with Self-Feedback},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2023}
+}
+
+@inproceedings{gou2024critic,
+  author    = {Zhibin Gou and Zhihong Shao and Yeyun Gong and Yelong Shen and Yujiu Yang and Nan Duan and Weizhu Chen},
+  title     = {{CRITIC}: Large Language Models Can Self-Correct with Tool-Interactive Critiquing},
+  booktitle = {Proc. Int. Conf. Learning Representations (ICLR)},
+  year      = {2024}
+}
+
+@inproceedings{huang2024cannot,
+  author    = {Jie Huang and Xinyun Chen and Swaroop Mishra and Huaixiu Steven Zheng and Adams Wei Yu and Xinying Song and Denny Zhou},
+  title     = {Large Language Models Cannot Self-Correct Reasoning Yet},
+  booktitle = {Proc. Int. Conf. Learning Representations (ICLR)},
+  year      = {2024}
+}
+
+@inproceedings{lightman2024verify,
+  author    = {Hunter Lightman and Vineet Kosaraju and Yura Burda and Harri Edwards and Bowen Baker and Teddy Lee and Jan Leike and John Schulman and Ilya Sutskever and Karl Cobbe},
+  title     = {Let's Verify Step by Step},
+  booktitle = {Proc. Int. Conf. Learning Representations (ICLR)},
+  year      = {2024}
+}
+
+@article{chen2023frugalgpt,
+  author  = {Lingjiao Chen and Matei Zaharia and James Zou},
+  title   = {{FrugalGPT}: How to Use Large Language Models While Reducing Cost and Improving Performance},
+  journal = {arXiv preprint arXiv:2305.05176},
+  year    = {2023}
+}
+
+% ---------- Benchmarks / environments ----------
+@article{yao2024taubench,
+  author  = {Shunyu Yao and Noah Shinn and Pedram Razavi and Karthik Narasimhan},
+  title   = {$\tau$-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains},
+  journal = {arXiv preprint arXiv:2406.12045},
+  year    = {2024}
+}
+
+@inproceedings{ruan2024toolemu,
+  author    = {Yangjun Ruan and Honghua Dong and Andrew Wang and Silviu Pitis and Yongchao Zhou and Jimmy Ba and Yann Dubois and Chris J. Maddison and Tatsunori Hashimoto},
+  title     = {Identifying the Risks of {LM} Agents with an {LM}-Emulated Sandbox},
+  booktitle = {Proc. Int. Conf. Learning Representations (ICLR)},
+  year      = {2024}
+}
+
+@article{backlund2025vending,
+  author  = {Axel Backlund and Lukas Petersson},
+  title   = {Vending-Bench: A Benchmark for Long-Term Coherence of Autonomous Agents},
+  journal = {arXiv preprint arXiv:2502.15840},
+  year    = {2025}
+}
+
+% VERIFY: full author list and arXiv id of EnterpriseBench (project page: ast-fri.github.io/EnterpriseBench)
+@misc{enterprisebench,
+  title        = {Can {LLMs} Help You at Work? A Sandbox for Evaluating {LLM} Agents in Enterprise Environments ({EnterpriseBench})},
+  howpublished = {\url{https://ast-fri.github.io/EnterpriseBench}},
+  year         = {2025}
+}
+
+% ---------- Fault injection / robustness of tool-using agents ----------
+@article{gupta2026reliabilitybench,
+  author  = {Aayush Gupta},
+  title   = {{ReliabilityBench}: Evaluating {LLM} Agent Reliability Under Production-Like Stress Conditions},
+  journal = {arXiv preprint arXiv:2601.06112},
+  year    = {2026}
+}
+
+% VERIFY: full author list (cited elsewhere as "Wang et al. 2026"); ICML 2026 poster
+@inproceedings{wang2026agentnoisebench,
+  author    = {Wang and others},
+  title     = {{AgentNoiseBench}: Benchmarking Robustness of Tool-Using {LLM} Agents Under Noisy Condition},
+  booktitle = {Proc. Int. Conf. Machine Learning (ICML)},
+  year      = {2026},
+  note      = {arXiv:2602.11348}
+}
+
+% VERIFY: full author list (Sun Yat-sen Univ., SMU, Monash); accepted at ASE 2026
+@inproceedings{agentchaos2026,
+  author    = {{AgentChaos authors}},
+  title     = {{AgentChaos}: Chaos Engineering for Agent Systems via Programmatic Fault Injection},
+  booktitle = {Proc. IEEE/ACM Int. Conf. Automated Software Engineering (ASE)},
+  year      = {2026},
+  note      = {arXiv:2608.06790}
+}
+
+@article{zhu2026toolmaze,
+  author  = {Dongsheng Zhu and Xuchen Ma and Yucheng Shen and Xiang Li and Yukun Zhao and Shuaiqiang Wang and Lingyong Yan and Dawei Yin},
+  title   = {When Tools Fail: Benchmarking Dynamic Replanning and Anomaly Recovery in {LLM} Agents},
+  journal = {arXiv preprint arXiv:2606.05806},
+  year    = {2026}
+}
+
+@article{gurram2026agentprop,
+  author  = {Bhaskar Gurram},
+  title   = {Auditing Automated Evaluation, Error Propagation, and Runtime Mitigation in Tool-Using Language Agents},
+  journal = {arXiv preprint arXiv:2604.16706},
+  year    = {2026},
+  note    = {Earlier title: AgentProp-Bench}
+}
+
+@article{kraishan2026loud,
+  author  = {Obada Kraishan},
+  title   = {Loud Failures, Quiet Failures: Fault Detection and Recovery in Tool-Using Language Model Agents},
+  journal = {arXiv preprint arXiv:2610.10062},
+  year    = {2026}
+}
+
+@article{he2026sscbench,
+  author  = {Xincheng He and Wanli Dong and Zhaoqiang Guo and Yan Liu and Lei Xu},
+  title   = {{SSCBench}: Evaluating the Evidential Validity of Fault-Injection Tests for Tool-Using {LLM} Agents},
+  journal = {arXiv preprint arXiv:2610.11514},
+  year    = {2026}
+}
+
+@article{mansoor2026verifiedtools,
+  author  = {Isham Kalappurackal Mansoor and Abhishek Phadke and Pratip Rana},
+  title   = {Verified Tool Calls Improve {LLM} Agent Reliability Under Non-Atomic Failures},
+  journal = {arXiv preprint arXiv:2608.02645},
+  year    = {2026}
+}
+
+% ---------- Selective / adaptive verification and critique ----------
+@inproceedings{park2026sag,
+  author    = {Heewon Park and Somin Im and Minhae Kwon},
+  title     = {Selective Critique for Cost-Aware {LLM} Agents in Long-Horizon Decision Making},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2026},
+  note      = {arXiv:2610.07335}
+}
+
+@article{ro2025sherlock,
+  author  = {Yeonju Ro and Haoran Qiu and {\'I}{\~n}igo Goiri and Rodrigo Fonseca and Ricardo Bianchini and Aditya Akella and Zhangyang Wang and Mattan Erez and Esha Choukse},
+  title   = {Sherlock: Reliable and Efficient Agentic Workflow Execution},
+  journal = {arXiv preprint arXiv:2511.00330},
+  year    = {2025}
+}
+
+@article{patel2026ava,
+  author  = {Dipkumar Patel},
+  title   = {Anytime Verified Agents: Adaptive Compute Allocation for Reliable {LLM} Reasoning Under Budget Constraints},
+  journal = {Transactions on Machine Learning Research (TMLR)},
+  year    = {2026}
+}
+
+@article{omidvar2026comm,
+  author  = {Hamed Omidvar and Vahideh Akhlaghi},
+  title   = {A Communication-Theoretic Framework for {LLM} Agents: Cost-Aware Adaptive Reliability},
+  journal = {arXiv preprint arXiv:2605.09121},
+  year    = {2026}
+}
+
+% VERIFY: author list
+@article{calibratethenact2026,
+  author  = {{Calibrate-Then-Act authors}},
+  title   = {Calibrate-Then-Act: Cost-Aware Exploration in {LLM} Agents},
+  journal = {arXiv preprint arXiv:2602.16699},
+  year    = {2026}
+}
+
+@article{chen2026reconsider,
+  author  = {Qian Chen and Chengyuan Liu and Xin Yu},
+  title   = {When Should Service Agents Reconsider? Difficulty-Routed Control in Customer-Service Operations},
+  journal = {arXiv preprint arXiv:2607.01426},
+  year    = {2026}
+}
+
+% VERIFY: author list
+@article{sieve2025,
+  author  = {{SIEVE authors}},
+  title   = {{SIEVE}: Selective Integrity Verification and Escalation for Defending {LLM} Agents against Indirect Prompt Injection},
+  journal = {arXiv preprint arXiv:2512.06716},
+  year    = {2025}
+}
+
+% VERIFY: author list
+@article{safeharness2026,
+  author  = {{SafeHarness authors}},
+  title   = {{SafeHarness}: Lifecycle-Integrated Security Architecture for {LLM}-based Agent Deployment},
+  journal = {arXiv preprint arXiv:2604.13630},
+  year    = {2026}
+}
+
+% VERIFY: author list
+@article{racg2026,
+  author  = {{RACG authors}},
+  title   = {Capability Minimization as a Safety Primitive: Risk-Aware Causal Gating for Least-Privilege {LLM} Agents},
+  journal = {arXiv preprint arXiv:2606.13884},
+  year    = {2026}
+}
+
+@article{sah2026verifiertax,
+  author  = {Tanmay Sah and Vishal Srivastava and Dolly Sah and Kayden Jordan},
+  title   = {The Verifier Tax: Horizon Dependent Safety--Success Tradeoffs in Tool Using {LLM} Agents},
+  journal = {arXiv preprint arXiv:2603.19328},
+  year    = {2026}
+}
+
+% VERIFY: author list
+@article{verificationlayer2026,
+  author  = {{Verification-layer authors}},
+  title   = {Verification as an Architectural Layer for {LLM} Agents},
+  journal = {arXiv preprint arXiv:2609.31937},
+  year    = {2026}
+}
+
+% VERIFY: author list
+@article{omvv2026,
+  author  = {{OMVV authors}},
+  title   = {Online Verification of Language Model Responses Under Cost Constraints},
+  journal = {arXiv preprint arXiv:2610.02632},
+  year    = {2026}
+}
+
+% ---------- Software ----------
+@misc{langgraph,
+  author       = {{LangChain, Inc.}},
+  title        = {{LangGraph}},
+  howpublished = {\url{https://github.com/langchain-ai/langgraph}},
+  year         = {2024}
+}
