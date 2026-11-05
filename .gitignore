@@ -28,3 +28,10 @@ results/*.csv
 .mypy_cache/
 # Agent run trajectories
 logs/**/*.jsonl
+
+# Each person's AI notes. Never committed.
+HANDOFF.md
+memory/
+
+# Local tool settings
+.claude/

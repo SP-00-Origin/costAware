@@ -466,8 +466,8 @@ costAware/
 │   ├── figures/              ← reliability-vs-overhead plots
 │   └── tables/               ← metric tables + ablation results
 ├── docs/
-├── IMPLEMENTATION.md         ← this file
-├── Cost_Aware_Adaptive_Verification_Updated_Implementation_Plan.md
+│   ├── IMPLEMENTATION.md     ← this file
+│   └── Cost_Aware_Adaptive_Verification_Updated_Implementation_Plan.md
 ├── README.md
 └── .gitignore
 ```
