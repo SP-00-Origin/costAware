@@ -64,6 +64,30 @@ def _add_usage(usage: Dict[str, int], msg: AIMessage) -> Dict[str, int]:
     return out
 
 
+def _finish_from_failed_call(exc) -> Optional[tuple]:
+    """If the provider rejected a call whose arguments look like finish(status, summary), return them."""
+    text = str(exc)
+    if "tool_use_failed" not in text:
+        return None
+    body = getattr(exc, "body", None)
+    gen = None
+    if isinstance(body, dict):
+        gen = (body.get("error") or body).get("failed_generation")
+    if gen is None:
+        import re
+        m = re.search(r"'failed_generation': '(.*)'\s*}\s*}?\s*$", text, re.S)
+        gen = m.group(1).encode().decode("unicode_escape") if m else None
+    try:
+        args = json.loads(gen).get("arguments") or {}
+        if isinstance(args, str):
+            args = json.loads(args)
+    except Exception:  # noqa: BLE001
+        return None
+    if "summary" in args or "status" in args:
+        return str(args.get("status", "done")), str(args.get("summary", ""))
+    return None
+
+
 def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, cache=None):
     """Compile the agent graph for one episode on `env` under verification `policy`."""
 
@@ -84,7 +108,18 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
         }
 
     def agent(state: AgentState) -> AgentState:
-        ai: AIMessage = llm.invoke(state["messages"])
+        try:
+            ai: AIMessage = llm.invoke(state["messages"])
+        except Exception as e:  # noqa: BLE001
+            finished = _finish_from_failed_call(e)
+            if finished is None:
+                raise
+            # Some open models (e.g. gpt-oss on Groq) emit their final "finish" under a
+            # made-up tool name such as "commentary". Treat that as a normal finish.
+            status, summary = finished
+            return {"llm_calls": state["llm_calls"] + 1, "done": True,
+                    "done_reason": "gave_up" if status == "gave_up" else "finish",
+                    "final_summary": summary, "latest_action": None}
         messages = state["messages"] + [ai]
         update: AgentState = {"llm_calls": state["llm_calls"] + 1, "usage": _add_usage(state["usage"], ai)}
         calls = list(getattr(ai, "tool_calls", None) or [])
@@ -183,13 +218,20 @@ def run_episode(task, llm, policy: str = "A", seed: int = 0, fault_rate: float =
     error = None
     try:
         # Each agent step visits 5 nodes; the limit is a hard backstop behind max_steps.
-        final = graph.invoke({"max_steps": max_steps}, config={"recursion_limit": 6 * max_steps + 20})
+        last: Dict[str, Any] = {}
+        for snapshot in graph.stream({"max_steps": max_steps}, stream_mode="values",
+                                     config={"recursion_limit": 6 * max_steps + 20}):
+            last = snapshot
+        final = last
     except Exception as e:  # noqa: BLE001 — an LLM/API failure must not lose the episode log
         error = f"{type(e).__name__}: {e}"
         passed, diff = oracle_check(env.true_state, task.expected_final_state, env.sim.initial_state)
-        final = {"trajectory": env.records, "step": len(env.records), "done_reason": "error",
-                 "final_summary": "", "llm_calls": None, "usage": {}, "oracle_pass": passed,
-                 "oracle_diff": diff}
+        # Keep the graph's own trajectory (it carries the policy's verify decisions);
+        # fall back to the raw env records only if the graph never got that far.
+        traj = last.get("trajectory") or env.records
+        final = {"trajectory": traj, "step": len(traj), "done_reason": "error",
+                 "final_summary": "", "llm_calls": last.get("llm_calls"),
+                 "usage": last.get("usage", {}), "oracle_pass": passed, "oracle_diff": diff}
 
     traj = final["trajectory"]
     return {

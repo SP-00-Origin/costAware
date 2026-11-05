@@ -189,3 +189,9 @@ def test_trajectory_roundtrip_and_replay(tmp_path):
     for r in back["trajectory"]:
         assert {"true_result", "observed_result", "fault_injected", "verify_decision", "trigger_reason"} <= set(r)
     assert replay_records(task, back["trajectory"], seed=2, fault_rate=0.4) == []
+
+
+def test_groq_provider_requires_key(monkeypatch):
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    with pytest.raises(RuntimeError):
+        make_llm("groq")

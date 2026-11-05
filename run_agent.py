@@ -10,6 +10,10 @@ Examples
   export ANTHROPIC_API_KEY=...
   python run_agent.py --task all --provider anthropic
 
+  # Same, on Groq (free API key from console.groq.com)
+  export GROQ_API_KEY=...
+  python run_agent.py --task all --provider groq
+
   # One task with faults under Policy D, showing true vs observed results
   python run_agent.py --task T08 --provider anthropic --policy D --fault-rate 0.25 --seed 3 -v
 
@@ -23,7 +27,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.agent import DEFAULT_MAX_STEPS, format_episode, make_llm, run_episode, save_episode  # noqa: E402
-from src.agent.llm import DEFAULT_MODEL  # noqa: E402
+from src.agent.llm import DEFAULT_MODELS, default_model  # noqa: E402
+
+try:  # pick up API keys from a .env file next to this script, if present
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env")
+except ImportError:
+    pass
 from src.environment.tasks import load_tasks  # noqa: E402
 
 
@@ -32,8 +42,9 @@ def main(argv=None):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--task", default="T01", help="task id, comma-separated ids, or 'all'")
-    p.add_argument("--provider", choices=["anthropic", "scripted"], default="anthropic")
-    p.add_argument("--model", default=None, help=f"Claude model id (default {DEFAULT_MODEL})")
+    p.add_argument("--provider", choices=["anthropic", "groq", "scripted"], default="anthropic")
+    p.add_argument("--model", default=None,
+                   help=f"model id (defaults: anthropic {DEFAULT_MODELS['anthropic']}, groq {DEFAULT_MODELS['groq']})")
     p.add_argument("--policy", choices=list("ABCD"), default="A")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--fault-rate", type=float, default=0.0, help="0 = clean environment")
@@ -51,7 +62,7 @@ def main(argv=None):
             p.error(f"unknown task id(s): {sorted(missing)}")
 
     log_dir = Path(args.log_dir or Path("logs") / time.strftime("run_%Y%m%d_%H%M%S"))
-    model_name = "scripted-reference" if args.provider == "scripted" else (args.model or DEFAULT_MODEL)
+    model_name = "scripted-reference" if args.provider == "scripted" else (args.model or default_model(args.provider))
 
     results = []
     for task in tasks:
