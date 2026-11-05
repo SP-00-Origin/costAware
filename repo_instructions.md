@@ -102,6 +102,25 @@ The person commits their work, so they must understand what is going into it.
 2. Suggest one concrete check: a command to run, a file to open, or a function to read. For a phase, use its "Visible progress" and "Exit criterion" in the plan.
 3. Update `PROGRESS.md` (it is committed, so the team sees it) and rewrite `HANDOFF.md` (§8).
 4. If the conversation has become long or switched topics, tell the user it is a good time to start a new chat, and make sure `HANDOFF.md` is ready for it.
+5. Give a start message for the next chat (below).
+
+#### Start message for the next chat
+
+At the end of each task, and whenever you suggest a new chat, give the user a short message they can paste into the next chat to carry on. Put it in a code block. Write it as the user talking, in 2–4 sentences, and include:
+
+- the project, the branch and the folder to work in
+- which files to read first: `HANDOFF.md` and `PROGRESS.md`
+- what was done last, with its commit hash
+- the exact next step, and where to start it
+- "Never push, only I push."
+
+If someone else will do the next part, write it for them: their name and the branch they should use. Also put the same message at the top of `HANDOFF.md`.
+
+Example:
+
+```
+Let's continue costAware on `krish/phase5-verifier` in my `costaware` folder. Read `HANDOFF.md` and `PROGRESS.md` first. Step 2 of Phase 5 is done (`a1b2c3d`). Next is step 3, the recovery node: start by planning it with me. Never push, only I push.
+```
 
 You don't need to wait for them to do the check.
 
