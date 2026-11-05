@@ -1,5 +1,7 @@
 # Repo instructions
 
+> **No AI ever pushes.** An AI may at most commit, and only after the person says yes. No `git push`, no `gh pr create`, no merging pull requests. The person pushes by themselves, from their own terminal, and is responsible for what reaches GitHub. If asked to push, the AI gives the command and stops.
+
 ## For everyone
 
 1. Don't push to `main`. Only Krish (`krish01info`) merges into `main`.
