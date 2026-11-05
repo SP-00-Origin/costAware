@@ -5,7 +5,7 @@
 ## For everyone
 
 1. Don't push to `main`. Only Krish (`krish01info`) merges into `main`.
-2. One branch per task, named `<your-name>/<task>`. Example: `krish/phase5-verifier`. Start it from whichever branch you need: `main`, or another branch if your work builds on it. Before opening a pull request, bring in the latest changes from the branch you will merge into.
+2. One branch per task, named `<your-name>/<task>`. Example: `krish/phase5-verifier`. Start it from whichever branch you need: `main`, or another branch if your work builds on it. Before you start work, and again before opening a pull request, bring in the latest changes from GitHub.
 3. The project is one codebase that grows phase by phase (see the plan in `docs/`). New work goes into the existing folders (`src/`, `tests/`, `tasks/`, `scripts/`), not into a copy of them.
 4. Work on one phase at a time. Finish a phase, open a pull request, then start the next one on a new branch.
 5. Don't change `docs/`, `archive/` or anything at the top level as a side effect of other work. If one of them needs to change, do it on its own branch and tell the team.
@@ -48,6 +48,11 @@ Read:
 
 Beyond that, read only the files the handoff or the task points to.
 
+**Git and `PROGRESS.md` are the truth; `HANDOFF.md` is only this person's own notes.** A teammate may have finished work since this person's last chat, so before trusting any of it:
+
+- Run `git fetch` and check whether the branch they will work on, or the branch it starts from, is behind GitHub. If it is, tell them what is missing (who did what) and ask whether to pull. Pull only after they say yes. If GitHub can't be reached, say so.
+- If `HANDOFF.md` disagrees with `PROGRESS.md` or the git history, trust `PROGRESS.md` and git, and tell the user what is out of date.
+
 Then ask who the user is (Krish, Siddharth or Shivam), unless `HANDOFF.md` already says. If the conversation starts a new phase, give the test in §3a before anything else.
 
 ### 2. Plan it, talk it through, then confirm the list
@@ -55,7 +60,7 @@ Then ask who the user is (Krish, Siddharth or Shivam), unless `HANDOFF.md` alrea
 What matters is that the user has thought about a change before you make it. A short request after a real discussion is fine. The same request with no discussion behind it is where to slow down.
 
 - If the task hasn't been discussed, in this conversation or in `HANDOFF.md`, don't start from a bare "build it" or "do the whole phase". Say what you think the task is and how you would do it: what is being built, why, and how it fits the pipeline. Then ask your questions (§3).
-- Before making a new branch, ask the user which branch to start from. Don't assume `main`.
+- Before making a new branch, look at the folder first: which branch is open, which other branches exist, and whether there are unsaved changes. Tell the user what you found and ask which branch to start from, suggesting the current one. Don't assume `main`. If there are unsaved changes, ask whether to commit them first or leave them; never throw them away. If a branch is behind GitHub, say so.
 - Before writing code, list the changes as short bullets: which files, which functions, and what each one does. Point out anything the plan doesn't ask for, such as an extra feature or a new library. Then ask:
 
   > Are you sure you want me to implement the following?
@@ -114,7 +119,10 @@ At the end of each task, and whenever you suggest a new chat, give the user a sh
 - the exact next step, and where to start it
 - "Never push, only I push."
 
-If someone else will do the next part, write it for them: their name and the branch they should use. Also put the same message at the top of `HANDOFF.md`.
+Where it goes depends on who does the next part:
+
+- **The same person:** put it at the top of `HANDOFF.md`.
+- **Someone else:** write it for them (their name and the branch they should use) and put it in `PROGRESS.md` under "Next", because `HANDOFF.md` is never shared. It reaches them when they pull. Also tell the user to send it to them directly.
 
 Example:
 
@@ -163,7 +171,7 @@ Research rules that the code must keep:
 
 ### 8. Memory, handoff and progress
 
-**`PROGRESS.md`** is committed and shared with the team. It lists what is done, what is next, and the decisions that matter for the next step. Keep it short and update it after each step.
+**`PROGRESS.md`** is committed and shared with the team. It lists what is done, what is next, and the decisions that matter for the next step. Keep it short and update it after each step. When it disagrees with someone's `HANDOFF.md`, `PROGRESS.md` and git win (§1).
 
 Each teammate also keeps two things for their AI assistant at the top of their own clone: `HANDOFF.md` and `memory/`. Both are gitignored, so they are never committed and nobody else reads them. Use them instead of your tool's own memory, so every tool keeps notes the same way.
 
