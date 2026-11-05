@@ -4,13 +4,15 @@ What is done, what is next, and what to know before starting. Updated after each
 
 ## Done
 
-| Phase | What | Where to look |
-|---|---|---|
-| 0 | Design frozen: environment, tools, faults, oracle, policies, metrics | `docs/Cost_Aware_Adaptive_Verification_Updated_Implementation_Plan.md` |
-| 1 | Deterministic procurement simulator, 17 tools with risk tiers | `src/environment/` |
-| 2 | 20 hand-written tasks (7 easy, 8 medium, 5 hard) and a non-LLM oracle | `tasks/`, `src/evaluation/` |
-| 3 | Fault injector (8 fault types, seeded) and replay | `src/faults/` |
-| 4 | LangGraph agent, `run_agent.py`, one JSONL log per episode | `src/agent/` |
+| Phase | What | Done by | Where to look |
+|---|---|---|---|
+| 0 | Design frozen: environment, tools, faults, oracle, policies, metrics | Team | `docs/Cost_Aware_Adaptive_Verification_Updated_Implementation_Plan.md` |
+| 1 | Deterministic procurement simulator, 17 tools with risk tiers | Krish | `src/environment/` |
+| 2 | 20 hand-written tasks (7 easy, 8 medium, 5 hard) and a non-LLM oracle | Krish | `tasks/`, `src/evaluation/` |
+| 3 | Fault injector (8 fault types, seeded) and replay | Krish | `src/faults/` |
+| 4 | LangGraph agent, `run_agent.py`, one JSONL log per episode | Krish | `src/agent/` |
+
+When a phase is finished, add its row with who did it. The AI uses "Done by" to decide whether to test the next person (`repo_instructions.md` §3a).
 
 - 2026-11-05: Groq provider added, so the real agent can run with a Groq key.
 - 2026-11-05: Repo rules and this file added.

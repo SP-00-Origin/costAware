@@ -46,6 +46,8 @@ Read:
 
 Beyond that, read only the files the handoff or the task points to.
 
+Then ask who the user is (Krish, Siddharth or Shivam), unless `HANDOFF.md` already says. If the conversation starts a new phase, give the test in §3a before anything else.
+
 ### 2. Plan it, talk it through, then confirm the list
 
 What matters is that the user has thought about a change before you make it. A short request after a real discussion is fine. The same request with no discussion behind it is where to slow down.
@@ -68,6 +70,18 @@ Your questions mainly check your own assumptions.
 - Say what you assume and where it comes from, then ask if it's right. For example: "The plan says recovery re-calls the same tool once, so I'll allow one retry. Right?"
 - Take answers as given. "Yes" is a fine answer. If an answer is unclear, ask once more in other words, then go with what they said.
 - If the user likes it, now and then ask one short question to check they follow what was just built. This is optional. If they say skip, skip it for the rest of the conversation.
+
+### 3a. Test before a new phase
+
+Whoever starts a phase must understand the work it builds on. The AI teaches this inside the chat: it tests, explains and tests again. Don't send the user off to read files on their own.
+
+1. Look at `PROGRESS.md` to see who did the previous phase ("Done by").
+2. **A different person did it:** give the test. It can't be skipped.
+3. **The same person did it:** offer the test. If they say no, skip it.
+4. The test is 3–5 questions on what the previous phase built, how it works, and where the new phase plugs in. Take the questions from `PROGRESS.md`, `docs/decisions.md`, the plan and the code. Ask one question at a time.
+5. After each answer, say whether it's right. If it's wrong or only half right, explain the answer in simple words with a small example, then ask about the same point again in different words. Keep going until they get it.
+6. When every question has been answered right, say so and start the phase.
+7. Never save test results in the repo. `HANDOFF.md` may note in one line that the test was done.
 
 ### 4. After a step
 
