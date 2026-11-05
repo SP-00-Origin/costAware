@@ -109,7 +109,7 @@ Do these in this order:
 1. Summarise what changed in a few lines, in simple words.
 2. Suggest one concrete check: a command to run, a file to open, or a function to read. For a phase, use its "Visible progress" and "Exit criterion" in the plan. You don't need to wait for them to do the check.
 3. Give the test before a commit (§3b).
-4. Update `PROGRESS.md` (it is committed, so the team sees it). When a phase is finished, add its row with who did it ("Done by"). Then commit the step and `PROGRESS.md` together.
+4. Update `PROGRESS.md` (it is committed, so the team sees it). When a phase is finished, add its row with who did it ("Done by"). If someone else will do the next part, write their start message into `PROGRESS.md` now (see below). Then commit the step and `PROGRESS.md` together.
 5. Rewrite `HANDOFF.md` (§8).
 6. Give a start message for the next chat (below).
 7. If the conversation has become long or switched topics, tell the user it is a good time to start a new chat.
