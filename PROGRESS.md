@@ -14,14 +14,14 @@ What is done, what is next, and what to know before starting. Updated after each
 
 When a phase is finished, add its row with who did it. The AI uses "Done by" to decide whether to test the next person (`repo_instructions.md` §3a).
 
-- 2026-11-05: Groq provider added, so the real agent can run with a Groq key.
+- 2026-11-05: Groq provider added, so the real agent can run with a Groq key. It is in its own pull request (`krish/groq-provider`); merge it before this one.
 - 2026-11-05: Repo rules and this file added.
-- Tests: 174 pass with `python -m pytest tests -q`, no API key needed.
+- Tests: all pass with `python -m pytest tests -q`, no API key needed.
 - Details and decisions for Phases 1–4: `docs/PHASES_1-4.md` and `docs/decisions.md`.
 
 ## Not shown yet
 
-- Phase 4's "agent completes a meaningful subset of clean tasks" with a real LLM. This can now be done with Groq:
+- Phase 4's "agent completes a meaningful subset of clean tasks" with a real LLM. This can be done with Groq once `krish/groq-provider` is merged:
   `python run_agent.py --task all --provider groq`
 
 ## Next: Phase 5 — verifier and recovery

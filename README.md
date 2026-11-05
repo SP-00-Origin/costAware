@@ -32,7 +32,7 @@ python -m pytest tests -q                           # all tests, no API key need
 python scripts/validate_tasks.py                    # check the task dataset
 python run_simulation.py --task T17 --rate 0.4      # pipeline demo, no LLM
 python run_agent.py --task all --provider scripted  # agent graph dry run, no key
-python run_agent.py --task all --provider groq      # real agent, needs GROQ_API_KEY in .env
+python run_agent.py --task all --provider groq      # real agent, needs GROQ_API_KEY in .env (after the Groq PR)
 ```
 
 ## Folders
