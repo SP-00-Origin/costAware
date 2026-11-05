@@ -34,7 +34,7 @@ From the plan (§10, Phase 5):
 - Visible progress: injected fault → verify → suspicious → recover → oracle PASS can be shown.
 - Exit criterion: recovery behaves the same under every policy.
 - Where it plugs in: `policy_router` in `src/agent/graph.py` already records `verify_decision`, and the step record already has `verifier_verdict` and `recovery_attempts`.
-- Branch: `krish/phase5-verifier`, started from the latest `main`.
+- Branch: `krish/phase5-verifier`. Ask which branch to start it from.
 
 ## Phases after that
 
