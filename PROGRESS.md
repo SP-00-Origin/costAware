@@ -24,6 +24,8 @@ What is done, what is next, and what to know before starting. Updated after each
 
 ## Next: Phase 5 — verifier and recovery
 
+We follow the original plan, not the novelty check (decided 2026-11-05, see `docs/decisions.md`).
+
 From the plan (§10, Phase 5):
 
 - Build: a self-verifier node, a recovery node, their logs, and a demo.

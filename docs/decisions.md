@@ -32,3 +32,7 @@ Everything the team has decided, in order. Details and reasons are in the plan (
 
 - 2026-11-05: Groq added as an agent provider (`--provider groq`, default `llama-3.3-70b-versatile`). Reason: Groq is the only API key available to Krish for running the real agent.
 - 2026-11-05: Repo rules, `PROGRESS.md` and this file added, following the layout of the SE project. Work continues phase by phase in the existing code; no separate prototype folders, because each phase builds directly on the code of the one before.
+
+## Direction (November 2026)
+
+- 2026-11-05: Follow the original plan (`Cost_Aware_Adaptive_Verification_Updated_Implementation_Plan.md`) for Phases 5–13, including Policy D as the proposed method. The novelty check (`report/FUTURE_PHASES_NOVELTY.md`, 14 October 2026) is not followed for now. Reason (Krish): "Let's just go towards the original plan. If we want to change the plan later, we can. We may not follow the novelty check." Pending team review.
