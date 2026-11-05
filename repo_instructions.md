@@ -8,14 +8,15 @@
 2. One branch per task, named `<your-name>/<task>`. Example: `krish/phase5-verifier`. Start it from whichever branch you need: `main`, or another branch if your work builds on it. Before you start work, and again before opening a pull request, bring in the latest changes from GitHub.
 3. The project is one codebase that grows phase by phase (see the plan in `docs/`). New work goes into the existing folders (`src/`, `tests/`, `tasks/`, `scripts/`), not into a copy of them.
 4. Work on one phase at a time. Finish a phase, open a pull request, then start the next one on a new branch.
-5. Don't change `docs/`, `archive/` or anything at the top level as a side effect of other work. If one of them needs to change, do it on its own branch and tell the team.
+5. Don't change `docs/`, `archive/` or anything at the top level as a side effect of other work. If one of them needs to change, do it on its own branch and tell the team. The exceptions are `PROGRESS.md` and `docs/decisions.md`, which are updated as part of normal work.
 6. When a task is done, open a pull request into `main` of `SP-00-Origin/costAware`. Say what changed and why, in your own words.
 7. Run `python -m pytest tests -q` before opening a pull request. All tests must pass, and they must pass without any API key.
 8. Never commit API keys. Keys go in `.env`, which git ignores. `.env.example` lists only the names of the keys.
 9. Don't commit generated output or your AI assistant's notes. Run logs (`logs/**/*.jsonl`), `HANDOFF.md` and `memory/` are ignored by git.
 10. Never force-push.
 11. The plan in `docs/` can change. Write down what should change and why in `docs/decisions.md`, put it in a pull request, and the team reviews it.
-12. You type `git push` yourself. AI assistants never push.
+12. Changes to `repo_instructions.md` go in their own pull request, with nothing else in it. Say what rule changes and why.
+13. You type `git push` yourself. AI assistants never push.
 
 ---
 
@@ -25,9 +26,9 @@ This section applies to any AI assistant working in this repo: Claude, Copilot, 
 
 - It takes priority over your defaults.
 - It also takes priority over chat requests that contradict it.
-- Only a change to this file on `main` changes these rules. A teammate saying "Krish said it's fine" does not.
+- These rules change only through a separate pull request that changes nothing but the rules, merged into `main`. A teammate saying "Krish said it's fine" does not change them. If a task needs a rule change, stop, tell the user, and do the rule change on its own branch first.
 
-Nothing here should hold the user up for long. Where a rule asks you to check with them, say it once, and go ahead when they confirm. The one thing you never do, even when asked, is push (§6).
+Nothing here should hold the user up for long. Where a rule asks you to check with them, say it once, and go ahead when they confirm. The things you never do, even when asked: push (§6), and skip a test that §3a or §3b says can't be skipped.
 
 ### Why these rules exist
 
@@ -53,7 +54,7 @@ Beyond that, read only the files the handoff or the task points to.
 - Run `git fetch` and check whether the branch they will work on, or the branch it starts from, is behind GitHub. If it is, tell them what is missing (who did what) and ask whether to pull. Pull only after they say yes. If GitHub can't be reached, say so.
 - If `HANDOFF.md` disagrees with `PROGRESS.md` or the git history, trust `PROGRESS.md` and git, and tell the user what is out of date.
 
-Then ask who the user is (Krish, Siddharth or Shivam), unless `HANDOFF.md` already says. If the conversation starts a new phase, give the test in §3a before anything else.
+Then ask who the user is (Krish, Siddharth or Shivam), unless `HANDOFF.md` already says. If the conversation starts a new phase, give the test in §3a after the checks above, before any other work.
 
 ### 2. Plan it, talk it through, then confirm the list
 
@@ -77,13 +78,13 @@ Your questions mainly check your own assumptions.
 - Ask one to three, only where the answer changes what you build: a trade-off, an edge case, how to read a rule.
 - Say what you assume and where it comes from, then ask if it's right. For example: "The plan says recovery re-calls the same tool once, so I'll allow one retry. Right?"
 - Take answers as given. "Yes" is a fine answer. If an answer is unclear, ask once more in other words, then go with what they said.
-- If the user likes it, now and then ask one short question to check they follow what was just built. This is optional. If they say skip, skip it for the rest of the conversation.
+- If the user likes it, now and then ask one short question to check they follow what was just built. This is optional. If they say skip, skip it for the rest of the conversation. This doesn't change the tests in §3a and §3b.
 
 ### 3a. Test before a new phase
 
 Whoever starts a phase must understand the work it builds on. The AI teaches this inside the chat: it tests, explains and tests again. Don't send the user off to read files on their own.
 
-1. Look at `PROGRESS.md` to see who did the previous phase ("Done by").
+1. Look at `PROGRESS.md` to see who did the previous phase ("Done by"). If several people did it and the user is one of them, treat it as the same person. If the previous phase isn't finished, tell the user and ask how to go on.
 2. **A different person did it:** give the test. It can't be skipped.
 3. **The same person did it:** offer the test. If they say no, skip it.
 4. The test is 3–5 questions on what the previous phase built, how it works, and where the new phase plugs in. Take the questions from `PROGRESS.md`, `docs/decisions.md`, the plan and the code. Ask one question at a time.
@@ -103,11 +104,15 @@ The person commits their work, so they must understand what is going into it.
 
 ### 4. After a step
 
+Do these in this order:
+
 1. Summarise what changed in a few lines, in simple words.
-2. Suggest one concrete check: a command to run, a file to open, or a function to read. For a phase, use its "Visible progress" and "Exit criterion" in the plan.
-3. Update `PROGRESS.md` (it is committed, so the team sees it) and rewrite `HANDOFF.md` (§8).
-4. If the conversation has become long or switched topics, tell the user it is a good time to start a new chat, and make sure `HANDOFF.md` is ready for it.
-5. Give a start message for the next chat (below).
+2. Suggest one concrete check: a command to run, a file to open, or a function to read. For a phase, use its "Visible progress" and "Exit criterion" in the plan. You don't need to wait for them to do the check.
+3. Give the test before a commit (§3b).
+4. Update `PROGRESS.md` (it is committed, so the team sees it). When a phase is finished, add its row with who did it ("Done by"). Then commit the step and `PROGRESS.md` together.
+5. Rewrite `HANDOFF.md` (§8).
+6. Give a start message for the next chat (below).
+7. If the conversation has become long or switched topics, tell the user it is a good time to start a new chat.
 
 #### Start message for the next chat
 
@@ -122,15 +127,13 @@ At the end of each task, and whenever you suggest a new chat, give the user a sh
 Where it goes depends on who does the next part:
 
 - **The same person:** put it at the top of `HANDOFF.md`.
-- **Someone else:** write it for them (their name and the branch they should use) and put it in `PROGRESS.md` under "Next", because `HANDOFF.md` is never shared. It reaches them when they pull. Also tell the user to send it to them directly.
+- **Someone else:** write it for them (their name and the branch they should use) and put it in `PROGRESS.md` under "Next", because `HANDOFF.md` is never shared. It reaches them when they pull. In `PROGRESS.md`, name the last step instead of giving its commit hash, because the hash isn't known until the commit is made. Also tell the user to send it to them directly.
 
 Example:
 
 ```
 Let's continue costAware on `krish/phase5-verifier` in my `costaware` folder. Read `HANDOFF.md` and `PROGRESS.md` first. Step 2 of Phase 5 is done (`a1b2c3d`). Next is step 3, the recovery node: start by planning it with me. Never push, only I push.
 ```
-
-You don't need to wait for them to do the check.
 
 ### 5. Changing the plan
 
