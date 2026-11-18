@@ -32,7 +32,8 @@ from langgraph.graph import END, START, StateGraph
 
 from ..environment.env import ProcurementEnv
 from ..evaluation.oracle import oracle_check
-from ..policies.policies import should_verify
+from ..policies.config import validate_policy_config
+from ..policies.policies import parse_confidence, should_verify
 from ..verifier.verifier import observation_history, verify_step
 from ..verifier.recovery import retry_action
 from .prompts import FINISH_TOOL, SYSTEM_PROMPT, task_message
@@ -46,7 +47,7 @@ class AgentState(TypedDict, total=False):
     messages: List[Any]
     step: int                         # agent tool calls executed so far
     max_steps: int
-    latest_action: Optional[Dict[str, Any]]      # {"tool", "args", "id"}
+    latest_action: Optional[Dict[str, Any]]      # {"tool", "args", "id", "confidence"}
     pending: Optional[Dict[str, Any]]            # record being built for the current step
     trajectory: List[Dict[str, Any]]             # completed step records (research log)
     done: bool
@@ -99,8 +100,11 @@ def _finish_from_failed_call(exc) -> Optional[tuple]:
 
 
 def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, cache=None,
-                verifier_llm=None):
+                verifier_llm=None, policy_config=None):
     """Compile the agent graph for one episode on `env` under verification `policy`."""
+    settings = validate_policy_config(policy_config)
+    if policy not in ("A", "B", "C", "D", "E"):
+        raise ValueError(f"Unknown policy: {policy}")
     if policy != "A" and verifier_llm is None:
         raise ValueError("A verifier_llm is required for verification policies")
 
@@ -163,12 +167,16 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
             return {**update, "messages": messages, "done": True,
                     "done_reason": "gave_up" if status == "gave_up" else "finish",
                     "final_summary": str(args.get("summary", "")), "latest_action": None}
-        action = {"tool": first["name"], "args": first.get("args") or {}, "id": first["id"]}
+        args = dict(first.get("args") or {})
+        confidence = parse_confidence(args.pop("_confidence", None))
+        action = {"tool": first["name"], "args": args, "id": first["id"], "confidence": confidence}
         return {**update, "messages": messages, "latest_action": action}
 
     def tool_exec(state: AgentState) -> AgentState:
         a = state["latest_action"]
         record = env.execute(a["tool"], a["args"], origin="agent")
+        record.update(action_confidence=a["confidence"],
+                      confidence_source="self_reported" if a["confidence"] is not None else "unavailable")
         return {"pending": record}
 
     def fault_injection(state: AgentState) -> AgentState:
@@ -178,10 +186,13 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
     def policy_router(state: AgentState) -> AgentState:
         r = dict(state["pending"])
         a = state["latest_action"]
-        verify, reason = should_verify(policy=policy, action={"tool": a["tool"], "args": r["args"]},
+        verify, reason = should_verify(policy=policy,
+                                       action={"tool": a["tool"], "args": r["args"],
+                                               "confidence": a["confidence"]},
                                        result=r["observed_result"],
                                        history=observation_history(state["trajectory"]),
-                                       step=state["step"], controller=controller, cache=cache)
+                                       step=state["step"], controller=controller, cache=cache,
+                                       config=settings)
         r.update(verify_decision=bool(verify), trigger_reason=reason,
                  agent_step=state["step"], verifier_verdict=None, recovery_attempts=0,
                  recovery_records=[], final_result_used=r["observed_result"],
@@ -212,6 +223,8 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
     def recovery(state: AgentState) -> AgentState:
         r = copy.deepcopy(state["pending"])
         retry = retry_action(env, r)
+        # Automatic retries have no new model-generated action confidence.
+        retry.update(action_confidence=None, confidence_source="unavailable")
         r["recovery_records"] = [retry]
         r["recovery_attempts"] = 1
         r["final_result_used"] = retry["observed_result"]
@@ -296,7 +309,7 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
 def run_episode(task, llm, policy: str = "A", seed: int = 0, fault_rate: float = 0.0,
                 max_steps: int = DEFAULT_MAX_STEPS, injector=None, model_name: str = "",
                 controller=None, cache=None, verifier_llm=None,
-                verifier_model_name: str = "") -> Dict[str, Any]:
+                verifier_model_name: str = "", policy_config=None) -> Dict[str, Any]:
     """
     Run one task end to end and return a summary + full trajectory.
     Policies other than A require an explicit verifier_llm. Steps count agent
@@ -304,15 +317,18 @@ def run_episode(task, llm, policy: str = "A", seed: int = 0, fault_rate: float =
     agent invocations; total_llm_calls includes verification. Token usage is
     provider-reported usage, so failed calls may have unknown token cost.
     fault_rate == 0 and no injector → clean environment.
+    policy_config sets C's interval and D's confidence threshold. The resolved
+    settings are copied into the summary, including when an episode fails.
     """
     from ..faults.injector import FaultInjector
+    settings = validate_policy_config(policy_config)
     if type(max_steps) is not int or max_steps < 1:
         raise ValueError("max_steps must be a positive integer")
     if injector is None and fault_rate > 0:
         injector = FaultInjector(seed=seed, fault_rate=fault_rate)
     env = ProcurementEnv(task, injector=injector)
     graph = build_graph(env, llm, policy=policy, controller=controller, cache=cache,
-                        verifier_llm=verifier_llm)
+                        verifier_llm=verifier_llm, policy_config=settings)
 
     t0 = time.time()
     error = None
@@ -349,6 +365,7 @@ def run_episode(task, llm, policy: str = "A", seed: int = 0, fault_rate: float =
     return {
         "task_id": task.id, "tier": task.tier, "family": task.family,
         "policy": policy, "seed": seed, "fault_rate": fault_rate, "model": model_name,
+        "policy_config": settings, "max_steps": max_steps,
         "oracle_pass": final["oracle_pass"], "oracle_diff": final["oracle_diff"],
         "done_reason": final["done_reason"], "final_summary": final.get("final_summary", ""),
         "steps": final["step"], "tool_calls": len(traj), "llm_calls": final.get("llm_calls"),

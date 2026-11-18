@@ -12,6 +12,7 @@ Model factory for the agent.
 Both expose bind_tools(tools) → object with invoke(messages) → AIMessage, which is all
 the graph needs, so the graph never knows which one it is driving.
 """
+import copy
 import os
 from typing import Any, Dict, List, Optional
 
@@ -37,12 +38,20 @@ def default_model(provider: str) -> str:
 
 
 def tool_schemas() -> List[Dict[str, Any]]:
-    """Registry tools + finish, in the OpenAI-style function format LangChain accepts."""
-    specs = dict(TOOL_SPECS)
-    specs[FINISH_TOOL] = FINISH_SPEC
-    return [{"type": "function",
-             "function": {"name": name, "description": s["description"], "parameters": s["parameters"]}}
-            for name, s in specs.items()]
+    """Add agent-only confidence without changing the simulator's tool registry."""
+    specs = copy.deepcopy(TOOL_SPECS)
+    schemas = []
+    for name, spec in specs.items():
+        spec["parameters"]["properties"]["_confidence"] = {
+            "type": "number", "minimum": 0, "maximum": 1,
+            "description": "Your confidence that this is the appropriate next action, before its result.",
+        }
+        spec["parameters"]["required"].append("_confidence")
+        schemas.append({"type": "function", "function": {
+            "name": name, "description": spec["description"], "parameters": spec["parameters"]}})
+    schemas.append({"type": "function", "function": {
+        "name": FINISH_TOOL, **copy.deepcopy(FINISH_SPEC)}})
+    return schemas
 
 
 def _make_chat_model(provider, model, temperature, max_tokens):
