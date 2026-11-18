@@ -45,16 +45,15 @@ def tool_schemas() -> List[Dict[str, Any]]:
             for name, s in specs.items()]
 
 
-def make_llm(provider: str = "anthropic", model: Optional[str] = None, task=None,
-             temperature: float = 0.0, max_tokens: int = 1024):
-    """Return a tool-bound chat model ready for graph use."""
+def _make_chat_model(provider, model, temperature, max_tokens):
+    """Create a provider model before assigning agent tools or verifier prompts."""
     if provider == "anthropic":
         if not os.environ.get("ANTHROPIC_API_KEY"):
             raise RuntimeError("ANTHROPIC_API_KEY is not set (use --provider scripted for a dry run)")
         from langchain_anthropic import ChatAnthropic
         llm = ChatAnthropic(model=model or default_model("anthropic"), temperature=temperature,
                             max_tokens=max_tokens, max_retries=3)
-        return llm.bind_tools(tool_schemas(), parallel_tool_calls=False)
+        return llm
     if provider == "groq":
         if not os.environ.get("GROQ_API_KEY"):
             raise RuntimeError("GROQ_API_KEY is not set (use --provider scripted for a dry run)")
@@ -63,12 +62,27 @@ def make_llm(provider: str = "anthropic", model: Optional[str] = None, task=None
         # client back off on HTTP 429 instead of ending the episode with an error.
         llm = ChatGroq(model=model or default_model("groq"), temperature=temperature,
                        max_tokens=max_tokens, max_retries=8, timeout=60)
-        return llm.bind_tools(tool_schemas(), parallel_tool_calls=False)
+        return llm
+    raise ValueError(f"Unknown provider {provider}")
+
+
+def make_llm(provider: str = "anthropic", model: Optional[str] = None, task=None,
+             temperature: float = 0.0, max_tokens: int = 1024):
+    """Return a tool-bound chat model ready for graph use."""
     if provider == "scripted":
         if task is None:
             raise ValueError("scripted provider needs the task")
         return ScriptedChatModel(task.reference_solution)
-    raise ValueError(f"Unknown provider {provider}")
+    llm = _make_chat_model(provider, model, temperature, max_tokens)
+    return llm.bind_tools(tool_schemas(), parallel_tool_calls=False)
+
+
+def make_verifier_llm(provider: str = "anthropic", model: Optional[str] = None):
+    """Separate model instance without action tools; uses the existing provider libraries."""
+    if provider == "scripted":
+        from ..verifier.verifier import ScriptedVerifier
+        return ScriptedVerifier()
+    return _make_chat_model(provider, model, temperature=0.0, max_tokens=512)
 
 
 class ScriptedChatModel:

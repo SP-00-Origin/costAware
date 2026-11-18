@@ -1,24 +1,28 @@
 """
-graph.py — Phase 4
+graph.py — Phases 4–5
 The LangGraph agent loop (plan Section 6). Every research-critical stage is its
 own node so it is explicit and separately logged:
 
-  START → init → agent ─┬─(tool call)→ tool_exec → fault_injection → policy_router → observe ─┐
-                        │                                                                    │
-                        └─(finish / no tool call / step limit)→ finalize → END   ← agent ←───┘
+  init → agent → tool_exec → fault_injection → policy_router
+  policy_router → observe (skip) or verifier (verify)
+  verifier → observe (OK), recovery → verifier (one retry), or replan → observe
+  observe → agent (continue) or finalize (step limit); finish → finalize → END
 
   init             builds the prompt from the task goal
   agent            LLM picks ONE structured tool call (or `finish`)
   tool_exec        runs the tool on the simulator → TRUE result (hidden from the agent)
   fault_injection  seeded injector → OBSERVED result
-  policy_router    Policy A–D decision (verify? + trigger reason) — logged.
-                   Phase 5 adds the self-verifier + recovery branch here.
+  policy_router    Policy A–D decision: skip or verify
+  verifier         checks observed evidence; suspicious results get one retry
+  recovery         re-calls the tool, then returns to verifier
+  replan           flags an unresolved concern for the next agent turn
   observe          returns ONLY the observed result to the agent; enforces the step limit
   finalize         deterministic oracle on the TRUE final state
 
 The graph state holds only serialisable data; the environment, model and policy
 are bound in a closure by build_graph().
 """
+import copy
 import json
 import time
 from typing import Any, Dict, List, Optional, TypedDict
@@ -29,6 +33,8 @@ from langgraph.graph import END, START, StateGraph
 from ..environment.env import ProcurementEnv
 from ..evaluation.oracle import oracle_check
 from ..policies.policies import should_verify
+from ..verifier.verifier import observation_history, verify_step
+from ..verifier.recovery import retry_action
 from .prompts import FINISH_TOOL, SYSTEM_PROMPT, task_message
 
 DEFAULT_MAX_STEPS = 30
@@ -47,9 +53,13 @@ class AgentState(TypedDict, total=False):
     done_reason: str                  # finish | gave_up | no_tool_call | max_steps
     final_summary: str
     llm_calls: int
-    usage: Dict[str, int]             # input/output tokens across agent calls
+    usage: Dict[str, int]             # agent tokens; episode summary adds verifier tokens
     oracle_pass: bool
     oracle_diff: Dict[str, Any]
+    verifier_calls: int
+    verifier_usage: Dict[str, int]
+    verifier_latency_ms: float
+    error: Optional[str]
 
 
 def _tool_content(observed: Any) -> str:
@@ -88,10 +98,16 @@ def _finish_from_failed_call(exc) -> Optional[tuple]:
     return None
 
 
-def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, cache=None):
+def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, cache=None,
+                verifier_llm=None):
     """Compile the agent graph for one episode on `env` under verification `policy`."""
+    if policy != "A" and verifier_llm is None:
+        raise ValueError("A verifier_llm is required for verification policies")
 
     def init(state: AgentState) -> AgentState:
+        max_steps = state.get("max_steps", DEFAULT_MAX_STEPS)
+        if type(max_steps) is not int or max_steps < 1:
+            raise ValueError("max_steps must be a positive integer")
         return {
             "task_id": env.task.id,
             "goal": env.task.goal,
@@ -105,6 +121,11 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
             "usage": {"input_tokens": 0, "output_tokens": 0},
             "latest_action": None,
             "pending": None,
+            "max_steps": max_steps,
+            "verifier_calls": 0,
+            "verifier_usage": {"input_tokens": 0, "output_tokens": 0},
+            "verifier_latency_ms": 0.0,
+            "error": None,
         }
 
     def agent(state: AgentState) -> AgentState:
@@ -113,7 +134,8 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
         except Exception as e:  # noqa: BLE001
             finished = _finish_from_failed_call(e)
             if finished is None:
-                raise
+                return {"llm_calls": state["llm_calls"] + 1, "done": True,
+                        "done_reason": "error", "error": f"{type(e).__name__}: {e}"}
             # Some open models (e.g. gpt-oss on Groq) emit their final "finish" under a
             # made-up tool name such as "commentary". Treat that as a normal finish.
             status, summary = finished
@@ -157,19 +179,70 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
         r = dict(state["pending"])
         a = state["latest_action"]
         verify, reason = should_verify(policy=policy, action={"tool": a["tool"], "args": r["args"]},
-                                       result=r["observed_result"], history=state["trajectory"],
-                                       step=r["step"], controller=controller, cache=cache)
+                                       result=r["observed_result"],
+                                       history=observation_history(state["trajectory"]),
+                                       step=state["step"], controller=controller, cache=cache)
         r.update(verify_decision=bool(verify), trigger_reason=reason,
-                 verifier_verdict=None, recovery_attempts=0)   # filled by Phase 5
+                 agent_step=state["step"], verifier_verdict=None, recovery_attempts=0,
+                 recovery_records=[], final_result_used=r["observed_result"],
+                 recovered=False, unrecovered_fault=False, replan_requested=False)
+        return {"pending": r}
+
+    def verifier(state: AgentState) -> AgentState:
+        r = copy.deepcopy(state["pending"])
+        current = r["recovery_records"][-1] if r["recovery_records"] else r
+        history = state["trajectory"]
+        if r["recovery_records"]:
+            history = history + [r]
+        check = verify_step(verifier_llm, state["goal"],
+                            {"tool": current["tool"], "args": current["args"]},
+                            current["observed_result"], history)
+        current.update(verifier_verdict=check["verdict"], verifier_error=check["error"],
+                       verifier_usage=check["usage"], verifier_latency_ms=check["latency_ms"])
+        # Recovered means the verifier accepted the retry, not that the oracle passed.
+        if r["recovery_attempts"]:
+            r["recovered"] = not check["verdict"]["suspicious"]
+        usage = dict(state["verifier_usage"])
+        for key in usage:
+            usage[key] += check["usage"][key]
+        return {"pending": r, "verifier_calls": state["verifier_calls"] + 1,
+                "verifier_usage": usage,
+                "verifier_latency_ms": state["verifier_latency_ms"] + check["latency_ms"]}
+
+    def recovery(state: AgentState) -> AgentState:
+        r = copy.deepcopy(state["pending"])
+        retry = retry_action(env, r)
+        r["recovery_records"] = [retry]
+        r["recovery_attempts"] = 1
+        r["final_result_used"] = retry["observed_result"]
+        return {"pending": r}
+
+    def replan(state: AgentState) -> AgentState:
+        r = dict(state["pending"])
+        current = r["recovery_records"][-1] if r["recovery_records"] else r
+        r.update(replan_requested=True, unrecovered_fault=True,
+                 recovery_concern=current["verifier_verdict"]["reason"])
         return {"pending": r}
 
     def observe(state: AgentState) -> AgentState:
-        r = state["pending"]
+        r = dict(state["pending"])
+        retries = r.pop("recovery_records")
         a = state["latest_action"]
         # The agent sees the OBSERVED result only — never the true result.
-        msg = ToolMessage(content=_tool_content(r["observed_result"]), tool_call_id=a["id"])
+        msg = ToolMessage(content=_tool_content(r["final_result_used"]), tool_call_id=a["id"])
+        messages = state["messages"] + [msg]
+        if retries or r["replan_requested"]:
+            details = {"action": {"tool": r["tool"], "args": r["args"]},
+                       "original_observation": r["observed_result"],
+                       "latest_observation": r["final_result_used"],
+                       "retry_count": r["recovery_attempts"],
+                       "concern": r.get("recovery_concern", "")}
+            instruction = "Replan using this concern." if r["replan_requested"] else "Review the retry evidence."
+            messages.append(HumanMessage(
+                content=instruction + " A write may have taken effect on both attempts; "
+                "check for duplicate effects before continuing. Recovery evidence: " + _tool_content(details)))
         step = state["step"] + 1
-        out: AgentState = {"messages": state["messages"] + [msg], "trajectory": state["trajectory"] + [r],
+        out: AgentState = {"messages": messages, "trajectory": state["trajectory"] + [r] + retries,
                            "step": step, "pending": None}
         if step >= state["max_steps"]:
             out.update(done=True, done_reason="max_steps")
@@ -185,9 +258,23 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
     def after_observe(state: AgentState) -> str:
         return "finalize" if state.get("done") else "agent"
 
+    def after_policy(state: AgentState) -> str:
+        return "verifier" if state["pending"]["verify_decision"] else "observe"
+
+    def after_verifier(state: AgentState) -> str:
+        r = state["pending"]
+        current = r["recovery_records"][-1] if r["recovery_records"] else r
+        if not current["verifier_verdict"]["suspicious"]:
+            return "observe"
+        # A broken verifier is not evidence that a write should be executed again.
+        if current["verifier_error"] or r["recovery_attempts"] >= 1:
+            return "replan"
+        return "recovery"
+
     g = StateGraph(AgentState)
     for name, fn in [("init", init), ("agent", agent), ("tool_exec", tool_exec),
                      ("fault_injection", fault_injection), ("policy_router", policy_router),
+                     ("verifier", verifier), ("recovery", recovery), ("replan", replan),
                      ("observe", observe), ("finalize", finalize)]:
         g.add_node(name, fn)
     g.add_edge(START, "init")
@@ -195,54 +282,87 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
     g.add_conditional_edges("agent", after_agent, {"tool_exec": "tool_exec", "finalize": "finalize"})
     g.add_edge("tool_exec", "fault_injection")
     g.add_edge("fault_injection", "policy_router")
-    g.add_edge("policy_router", "observe")
+    g.add_conditional_edges("policy_router", after_policy,
+                            {"verifier": "verifier", "observe": "observe"})
+    g.add_conditional_edges("verifier", after_verifier,
+                            {"observe": "observe", "recovery": "recovery", "replan": "replan"})
+    g.add_edge("recovery", "verifier")
+    g.add_edge("replan", "observe")
     g.add_conditional_edges("observe", after_observe, {"agent": "agent", "finalize": "finalize"})
     g.add_edge("finalize", END)
-    return g.compile()
+    return g.compile().with_config(recursion_limit=10 * DEFAULT_MAX_STEPS + 20)
 
 
 def run_episode(task, llm, policy: str = "A", seed: int = 0, fault_rate: float = 0.0,
                 max_steps: int = DEFAULT_MAX_STEPS, injector=None, model_name: str = "",
-                controller=None, cache=None) -> Dict[str, Any]:
+                controller=None, cache=None, verifier_llm=None,
+                verifier_model_name: str = "") -> Dict[str, Any]:
     """
     Run one task end to end and return a summary + full trajectory.
+    Policies other than A require an explicit verifier_llm. Steps count agent
+    actions; tool_calls and trajectory also include retries. llm_calls counts
+    agent invocations; total_llm_calls includes verification. Token usage is
+    provider-reported usage, so failed calls may have unknown token cost.
     fault_rate == 0 and no injector → clean environment.
     """
     from ..faults.injector import FaultInjector
+    if type(max_steps) is not int or max_steps < 1:
+        raise ValueError("max_steps must be a positive integer")
     if injector is None and fault_rate > 0:
         injector = FaultInjector(seed=seed, fault_rate=fault_rate)
     env = ProcurementEnv(task, injector=injector)
-    graph = build_graph(env, llm, policy=policy, controller=controller, cache=cache)
+    graph = build_graph(env, llm, policy=policy, controller=controller, cache=cache,
+                        verifier_llm=verifier_llm)
 
     t0 = time.time()
     error = None
     try:
-        # Each agent step visits 5 nodes; the limit is a hard backstop behind max_steps.
+        # A step can include two verifier visits, one retry, and one replan node.
         last: Dict[str, Any] = {}
         for snapshot in graph.stream({"max_steps": max_steps}, stream_mode="values",
-                                     config={"recursion_limit": 6 * max_steps + 20}):
+                                     config={"recursion_limit": 10 * max_steps + 20}):
             last = snapshot
         final = last
     except Exception as e:  # noqa: BLE001 — an LLM/API failure must not lose the episode log
         error = f"{type(e).__name__}: {e}"
         passed, diff = oracle_check(env.true_state, task.expected_final_state, env.sim.initial_state)
-        # Keep the graph's own trajectory (it carries the policy's verify decisions);
-        # fall back to the raw env records only if the graph never got that far.
-        traj = last.get("trajectory") or env.records
-        final = {"trajectory": traj, "step": len(traj), "done_reason": "error",
+        # Merge partial graph metadata with every executed tool call, including retries.
+        logged = {r["step"]: r for r in last.get("trajectory", [])}
+        if last.get("pending"):
+            pending = dict(last["pending"])
+            for retry in pending.pop("recovery_records", []):
+                logged[retry["step"]] = retry
+            logged[pending["step"]] = pending
+        traj = [logged.get(r["step"], r) for r in env.records]
+        final = {**last, "trajectory": traj,
+                 "step": sum(r["origin"] == "agent" for r in traj), "done_reason": "error",
                  "final_summary": "", "llm_calls": last.get("llm_calls"),
                  "usage": last.get("usage", {}), "oracle_pass": passed, "oracle_diff": diff}
 
     traj = final["trajectory"]
+    agent_usage = final.get("usage", {})
+    verifier_usage = final.get("verifier_usage", {})
+    usage = {}
+    for key in ("input_tokens", "output_tokens"):
+        usage[key] = agent_usage.get(key, 0) + verifier_usage.get(key, 0)
+    verifier_calls = final.get("verifier_calls", 0)
     return {
         "task_id": task.id, "tier": task.tier, "family": task.family,
         "policy": policy, "seed": seed, "fault_rate": fault_rate, "model": model_name,
         "oracle_pass": final["oracle_pass"], "oracle_diff": final["oracle_diff"],
         "done_reason": final["done_reason"], "final_summary": final.get("final_summary", ""),
-        "steps": final["step"], "llm_calls": final.get("llm_calls"), "usage": final.get("usage", {}),
+        "steps": final["step"], "tool_calls": len(traj), "llm_calls": final.get("llm_calls"),
+        "verifier_calls": verifier_calls,
+        "total_llm_calls": (final.get("llm_calls") or 0) + verifier_calls,
+        "usage": usage, "agent_usage": agent_usage, "verifier_usage": verifier_usage,
+        "verifier_model": verifier_model_name,
+        "verifier_latency_ms": round(final.get("verifier_latency_ms", 0.0), 3),
+        "recovery_attempts": sum(r.get("recovery_attempts", 0) for r in traj),
+        "recovered_steps": sum(bool(r.get("recovered")) for r in traj),
+        "unrecovered_steps": sum(bool(r.get("unrecovered_fault")) for r in traj),
         "faults_injected": sum(1 for r in traj if r.get("fault_injected")),
-        "verify_triggered": sum(1 for r in traj if r.get("verify_decision")),
+        "verify_triggered": sum(1 for r in traj if r.get("verify_decision") and r["origin"] == "agent"),
         "invalid_calls": sum(1 for r in traj if r.get("invalid_call")),
-        "wall_time_s": round(time.time() - t0, 3), "error": error,
+        "wall_time_s": round(time.time() - t0, 3), "error": error or final.get("error"),
         "trajectory": traj,
     }

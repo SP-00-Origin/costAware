@@ -27,7 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.agent import DEFAULT_MAX_STEPS, format_episode, make_llm, run_episode, save_episode  # noqa: E402
-from src.agent.llm import DEFAULT_MODELS, default_model  # noqa: E402
+from src.agent.llm import DEFAULT_MODELS, default_model, make_verifier_llm  # noqa: E402
 
 try:  # pick up API keys from a .env file next to this script, if present
     from dotenv import load_dotenv
@@ -46,12 +46,18 @@ def main(argv=None):
     p.add_argument("--model", default=None,
                    help=f"model id (defaults: anthropic {DEFAULT_MODELS['anthropic']}, groq {DEFAULT_MODELS['groq']})")
     p.add_argument("--policy", choices=list("ABCD"), default="A")
+    p.add_argument("--verifier-model", default=None,
+                   help="verifier model on the same provider (default: agent model)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--fault-rate", type=float, default=0.0, help="0 = clean environment")
     p.add_argument("--max-steps", type=int, default=DEFAULT_MAX_STEPS)
     p.add_argument("--log-dir", default=None, help="default logs/<timestamp>")
     p.add_argument("-v", "--verbose", action="store_true", help="show observed/true results per step")
     args = p.parse_args(argv)
+    if args.max_steps < 1:
+        p.error("--max-steps must be positive")
+    if not 0 <= args.fault_rate <= 1:
+        p.error("--fault-rate must be between 0 and 1")
 
     tasks = load_tasks()
     if args.task != "all":
@@ -63,12 +69,19 @@ def main(argv=None):
 
     log_dir = Path(args.log_dir or Path("logs") / time.strftime("run_%Y%m%d_%H%M%S"))
     model_name = "scripted-reference" if args.provider == "scripted" else (args.model or default_model(args.provider))
+    verifier_name = "scripted-verifier" if args.provider == "scripted" else (args.verifier_model or model_name)
+    if args.provider == "scripted" and args.policy != "A":
+        print("Offline smoke test: scripted verifier notices explicit errors only; not an LLM evaluation.")
 
     results = []
     for task in tasks:
         llm = make_llm(args.provider, model=args.model, task=task)
+        verifier = None
+        if args.policy != "A":
+            verifier = make_verifier_llm(args.provider, model=verifier_name)
         res = run_episode(task, llm, policy=args.policy, seed=args.seed, fault_rate=args.fault_rate,
-                          max_steps=args.max_steps, model_name=model_name)
+                          max_steps=args.max_steps, model_name=model_name, verifier_llm=verifier,
+                          verifier_model_name=verifier_name if verifier is not None else "")
         save_episode(res, log_dir)
         results.append(res)
         print(format_episode(res, show_results=args.verbose), "\n")
