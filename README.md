@@ -1,87 +1,68 @@
 # Cost-Aware Adaptive Verification for Long-Horizon LLM Agents
 
-A research platform evaluating cost-effective, risk-triggered verification strategies for tool-using LLM agents executing long-horizon tasks within a **Synthetic Enterprise Procurement & Operations Environment**.
+A research testbed that asks: can a tool-using LLM agent decide **when** to check its own actions, so it stays almost as reliable as checking every step while paying only a fraction of the cost?
 
----
-
-## 🎯 Research Objective
-
-Investigate whether an autonomous LLM agent can dynamically determine *when* and *what* to verify—balancing task reliability against token cost, tool overhead, and execution latency compared to standard verification baselines.
-
----
-
-## 🔄 Execution Pipeline
+The agent works in a simulated **enterprise procurement** world (vendors, quotes, budgets, purchase orders, approvals, invoices). Tool results are sometimes corrupted on purpose, and a hidden, non-LLM oracle checks whether the task really succeeded.
 
 ```text
-Task Definition
-  └── LLM Agent Execution
-        └── Tool Invocation
-              └── Controlled Fault Injection
-                    └── Verification Policy Trigger
-                          └── Self-Verification & Deterministic Checks
-                                └── Error Recovery
-                                      └── Hidden Oracle Evaluation & Trajectory Logging
+Task → LangGraph agent → Tool → Fault injector → Policy A/B/C/D
+     → (Self-verifier) → Recovery → Next step
+     → Deterministic oracle → Logs → Metrics
 ```
 
----
+Research project, 2026–27.
 
-## 🚦 Status
+## Team
 
-Phases 0–4 of the implementation plan are complete (simulator, 20-task dataset + oracle, fault injector, LangGraph agent).
-Details and design decisions: [`docs/PHASES_1-4.md`](docs/PHASES_1-4.md). Next: Phase 5 (self-verifier + recovery).
+| Who | Role |
+|---|---|
+| Krish Sharma | Maintainer: reviews and merges every pull request into `main`. |
+| Siddharth Ranka, Shivam | Team members. |
+
+Following the plan, nobody is permanently assigned to one part; everyone should understand the whole pipeline.
+
+## Status
+
+Phases 0–4 are done: simulator, 20 tasks with oracle, fault injector, LangGraph agent. Next is Phase 5: self-verifier and recovery.
+See [`PROGRESS.md`](PROGRESS.md).
 
 ```bash
 pip install -r requirements.txt
-python -m pytest tests -q                           # full test suite, no API key needed
-python scripts/validate_tasks.py                    # validate the task dataset
-python run_simulation.py --task T17 --rate 0.4      # deterministic pipeline demo
-python run_agent.py --task all --provider scripted  # agent graph dry run
-python run_agent.py --task all --provider anthropic # real agent (needs ANTHROPIC_API_KEY)
+python -m pytest tests -q                           # all tests, no API key needed
+python scripts/validate_tasks.py                    # check the task dataset
+python run_simulation.py --task T17 --rate 0.4      # pipeline demo, no LLM
+python run_agent.py --task all --provider scripted  # agent graph dry run, no key
+python run_agent.py --task all --provider groq      # real agent, needs GROQ_API_KEY in .env (after the Groq PR)
 ```
 
----
+## Folders
 
-## 📁 Repository Structure
+| Folder | Contents |
+|---|---|
+| `src/environment/` | Procurement simulator, tools with risk tiers, task loader. |
+| `src/evaluation/` | Deterministic oracle and task validation. |
+| `src/faults/` | Fault injector and replay. |
+| `src/agent/` | LangGraph agent, model providers, prompts, trajectory logging. |
+| `src/policies/` | Verification policies A–D. |
+| `src/verifier/` | Self-verifier. Empty until Phase 5. |
+| `tasks/` | `build_tasks.py` (source of truth) and the generated `tasks.jsonl`. |
+| `tests/` | pytest suite. |
+| `scripts/` | Task validation and trigger-coverage scripts. |
+| `experiments/`, `logs/`, `results/` | Experiment configs, run logs (not committed) and results. |
+| `docs/` | The implementation plan, the list of decisions, Phase 1–4 notes, and the report. |
+| `archive/` | Earlier notes. Reference only. |
 
-```text
-costaware/
-├── docs/                 # Research notes and documentation
-├── experiments/          # Experiment runners and evaluation pipelines
-├── logs/                 # Trajectory and runtime execution logs
-├── results/              # Output artifacts
-│   ├── raw/              # Raw run logs and data dumps
-│   ├── figures/          # Generated plots and visualizations
-│   └── tables/           # Metric tables and summary reports
-├── src/                  # Core framework source code
-│   ├── environment/      # Enterprise procurement simulator, state, tools, oracle
-│   ├── faults/           # Fault injection engine for agent observations
-│   ├── agent/            # LLM agent definitions and prompt scaffolds
-│   ├── verification/     # Self-verification checks and recovery routines
-│   ├── policies/         # Verification policies (adaptive, fixed, baselines)
-│   ├── graph/            # Workflow orchestration (LangGraph)
-│   └── evaluation/       # Performance, cost, and reliability metrics
-├── tasks/                # tasks.jsonl (generated) + build_tasks.py (source of truth)
-├── scripts/              # validate_tasks.py
-├── tests/                # pytest suite (simulator, tasks/oracle, injector, agent)
-├── .gitignore
-└── README.md
-```
+## Verification policies
 
----
+- **A, no verification:** never verifies.
+- **B, always verify:** verifies after every action.
+- **C, fixed schedule:** verifies every N steps.
+- **D, adaptive:** verifies on high-risk actions, schema/sanity failures or low confidence.
 
-## ⚖️ Verification Policies
+## What is measured
 
-1. **Policy A (No Verification):** Executes tasks open-loop without verification.
-2. **Policy B (Always Verify):** Verifies each tool call and state transition.
-3. **Policy C (Fixed Schedule):** Verifies at predetermined step intervals.
-4. **Policy D (Adaptive Verification):** Selectively verifies based on dynamic risk signals, cost thresholds, and uncertainty.
+Task success rate, fault recovery rate, error propagation, verification cost (tokens, calls, latency), and reliability against the verification budget.
 
----
+## Contributing
 
-## 📊 Evaluation Dimensions
-
-- **Task Success Rate:** End-to-end task completion against ground truth oracle.
-- **Fault Recovery Rate:** Frequency of successful recovery from injected errors.
-- **Error Propagation:** Downstream impact of undetected faults.
-- **Verification Overhead & Cost:** Cumulative token cost, API calls, and end-to-end latency.
-- **Pareto Efficiency:** Reliability curve relative to the verification budget.
+Read [`repo_instructions.md`](repo_instructions.md) first.

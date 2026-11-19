@@ -37,6 +37,10 @@ def call(name, i=0, **args):
 FINISH = call("finish", 99, status="done", summary="ok")
 
 
+def accepting_verifier():
+    return ListModel([AIMessage(content='{"suspicious": false, "reason": "Accepted in test."}')])
+
+
 # ─── Structure ───────────────────────────────────────────────────────────────
 
 def test_graph_has_explicit_research_nodes():
@@ -159,7 +163,8 @@ def test_agent_only_sees_observed_results():
                                            ("D", None)])
 def test_policy_router_logs_decisions(policy, expect):
     task = TASKS["T07"]
-    res = run_episode(task, make_llm("scripted", task=task), policy=policy)
+    res = run_episode(task, make_llm("scripted", task=task), policy=policy,
+                      verifier_llm=accepting_verifier())
     for r in res["trajectory"]:
         assert "verify_decision" in r and "trigger_reason" in r
         if expect:
@@ -172,7 +177,8 @@ def test_policy_router_logs_decisions(policy, expect):
 def test_faults_are_identical_across_policies():
     """Same task + seed → same faults on the same actions, whatever the policy."""
     task = TASKS["T20"]
-    runs = {p: run_episode(task, make_llm("scripted", task=task), policy=p, seed=6, fault_rate=0.3)
+    runs = {p: run_episode(task, make_llm("scripted", task=task), policy=p, seed=6, fault_rate=0.3,
+                           verifier_llm=accepting_verifier())
             for p in "ABCD"}
     sig = {p: [(r["tool"], r["fault_injected"]) for r in res["trajectory"]] for p, res in runs.items()}
     assert sig["A"] == sig["B"] == sig["C"] == sig["D"]
@@ -182,10 +188,17 @@ def test_faults_are_identical_across_policies():
 
 def test_trajectory_roundtrip_and_replay(tmp_path):
     task = TASKS["T17"]
-    res = run_episode(task, make_llm("scripted", task=task), policy="D", seed=2, fault_rate=0.4)
+    res = run_episode(task, make_llm("scripted", task=task), policy="D", seed=2, fault_rate=0.4,
+                      verifier_llm=accepting_verifier())
     path = save_episode(res, tmp_path)
     back = load_episode(path)
     assert back["oracle_pass"] == res["oracle_pass"] and len(back["trajectory"]) == res["steps"]
     for r in back["trajectory"]:
         assert {"true_result", "observed_result", "fault_injected", "verify_decision", "trigger_reason"} <= set(r)
     assert replay_records(task, back["trajectory"], seed=2, fault_rate=0.4) == []
+
+
+def test_groq_provider_requires_key(monkeypatch):
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    with pytest.raises(RuntimeError):
+        make_llm("groq")

@@ -49,8 +49,9 @@ def _short(obj: Any, n: int = 60) -> str:
 
 
 def format_episode(result: Dict[str, Any], show_results: bool = False) -> str:
+    fault_description = result.get("fault_source") or f"fault rate {result['fault_rate']}"
     lines = [f"── {result['task_id']} | policy {result['policy']} | seed {result['seed']} | "
-             f"fault rate {result['fault_rate']} | model {result.get('model') or '-'}",
+             f"{fault_description} | model {result.get('model') or '-'}",
              f"{'#':>3} {'Tool':<23} {'Args':<36} {'Fault':<17} {'Verify':<6} Reason"]
     for i, r in enumerate(result["trajectory"]):
         verify = "YES" if r.get("verify_decision") else "no"
@@ -60,9 +61,21 @@ def format_episode(result: Dict[str, Any], show_results: bool = False) -> str:
             lines.append(f"      observed: {_short(r['observed_result'], 110)}")
             if r.get("fault_injected"):
                 lines.append(f"      true:     {_short(r['true_result'], 110)}")
+        if r.get("origin") == "recovery":
+            lines.append(f"      retry of tool step {r['recovery_of']}")
+        if r.get("verifier_verdict") is not None:
+            v = r["verifier_verdict"]
+            lines.append(f"      verifier: {'SUSPICIOUS' if v['suspicious'] else 'OK'} — {v['reason']}")
+        if r.get("verifier_error"):
+            lines.append(f"      verifier error: {r['verifier_error']}")
+        if r.get("replan_requested"):
+            lines.append("      unresolved after automatic recovery; concern sent to agent for replanning")
     verdict = "PASS ✅" if result["oracle_pass"] else "FAIL ❌"
     lines.append(f"    end: {result['done_reason']} after {result['steps']} steps | "
                  f"faults {result['faults_injected']} | verify {result['verify_triggered']} | ORACLE {verdict}")
+    if "verifier_calls" in result:
+        lines.append(f"    verifier calls {result['verifier_calls']} | retries {result['recovery_attempts']} | "
+                     f"retry accepted {result['recovered_steps']} | unresolved {result['unrecovered_steps']}")
     if not result["oracle_pass"]:
         failed = {k: v for k, v in result["oracle_diff"].items() if not v["pass"]}
         for k, v in failed.items():

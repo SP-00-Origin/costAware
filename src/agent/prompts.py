@@ -18,6 +18,9 @@ How to work:
 - Tool results come from live systems and are not always reliable: an answer can be incomplete,
   malformed, out of date or time out. Write actions have real effects even if their response is lost.
 - Follow the company rules stated in the task.
+- Include `_confidence` in each procurement tool call: a number from 0 to 1 expressing
+  how sure you are that this is the appropriate next action given the evidence you have.
+  This is your self-assessment before seeing the tool's result, not a guarantee of success.
 - When the task is complete, call `finish` with a short summary. If you cannot complete it, call
   `finish` with status "gave_up" and explain why. Do not stop without calling `finish`."""
 
