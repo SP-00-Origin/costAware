@@ -31,9 +31,11 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langgraph.graph import END, START, StateGraph
 
 from ..environment.env import ProcurementEnv
+from ..environment.tools import HIGH_RISK_TOOLS, MEDIUM_RISK_TOOLS
 from ..evaluation.oracle import oracle_check
 from ..policies.config import validate_policy_config
 from ..policies.policies import parse_confidence, should_verify
+from ..provider_errors import error_details
 from ..verifier.verifier import observation_history, verify_step
 from ..verifier.recovery import retry_action
 from .prompts import FINISH_TOOL, SYSTEM_PROMPT, task_message
@@ -61,6 +63,8 @@ class AgentState(TypedDict, total=False):
     verifier_usage: Dict[str, int]
     verifier_latency_ms: float
     error: Optional[str]
+    error_details: Optional[Dict[str, Any]]
+    agent_responses: List[Dict[str, Any]]
 
 
 def _tool_content(observed: Any) -> str:
@@ -133,22 +137,34 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
         }
 
     def agent(state: AgentState) -> AgentState:
-        try:
-            ai: AIMessage = llm.invoke(state["messages"])
-        except Exception as e:  # noqa: BLE001
-            finished = _finish_from_failed_call(e)
-            if finished is None:
-                return {"llm_calls": state["llm_calls"] + 1, "done": True,
-                        "done_reason": "error", "error": f"{type(e).__name__}: {e}"}
-            # Some open models (e.g. gpt-oss on Groq) emit their final "finish" under a
-            # made-up tool name such as "commentary". Treat that as a normal finish.
-            status, summary = finished
-            return {"llm_calls": state["llm_calls"] + 1, "done": True,
-                    "done_reason": "gave_up" if status == "gave_up" else "finish",
-                    "final_summary": summary, "latest_action": None}
+        update: AgentState = {"llm_calls": state["llm_calls"], "usage": state["usage"],
+                              "agent_responses": list(state.get("agent_responses", []))}
+        for attempt in (1, 2):
+            update["llm_calls"] += 1
+            try:
+                ai: AIMessage = llm.invoke(state["messages"])
+            except Exception as e:  # noqa: BLE001
+                finished = _finish_from_failed_call(e)
+                if finished is None:
+                    return {**update, "done": True, "done_reason": "error",
+                            "error": f"{type(e).__name__}: {e}", "error_details": error_details(e)}
+                status, summary = finished
+                return {**update, "done": True,
+                        "done_reason": "gave_up" if status == "gave_up" else "finish",
+                        "final_summary": summary, "latest_action": None}
+            calls = list(ai.tool_calls or [])
+            reason = ai.response_metadata.get("finish_reason")
+            usage = _add_usage({}, ai)
+            update["usage"] = _add_usage(update["usage"], ai)
+            update["agent_responses"].append({"call": update["llm_calls"], "step": state["step"],
+                                              "attempt": attempt, "finish_reason": reason,
+                                              "tool_call_count": len(calls), **usage})
+            if reason != "length" or calls:
+                break
+        if reason == "length" and not calls:
+            return {**update, "done": True, "done_reason": "truncated",
+                    "error": "TruncatedResponse: output limit reached without a tool call"}
         messages = state["messages"] + [ai]
-        update: AgentState = {"llm_calls": state["llm_calls"] + 1, "usage": _add_usage(state["usage"], ai)}
-        calls = list(getattr(ai, "tool_calls", None) or [])
         if not calls:
             text = ai.content if isinstance(ai.content, str) else json.dumps(ai.content, default=str)
             return {**update, "messages": messages, "done": True, "done_reason": "no_tool_call",
@@ -210,6 +226,8 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
                             current["observed_result"], history)
         current.update(verifier_verdict=check["verdict"], verifier_error=check["error"],
                        verifier_usage=check["usage"], verifier_latency_ms=check["latency_ms"])
+        if check["error_details"]:
+            current["verifier_error_details"] = check["error_details"]
         # Recovered means the verifier accepted the retry, not that the oracle passed.
         if r["recovery_attempts"]:
             r["recovered"] = not check["verdict"]["suspicious"]
@@ -233,8 +251,11 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
     def replan(state: AgentState) -> AgentState:
         r = dict(state["pending"])
         current = r["recovery_records"][-1] if r["recovery_records"] else r
-        r.update(replan_requested=True, unrecovered_fault=True,
-                 recovery_concern=current["verifier_verdict"]["reason"])
+        concern = current["verifier_verdict"]["reason"]
+        if r["tool"] in HIGH_RISK_TOOLS or r["tool"] in MEDIUM_RISK_TOOLS:
+            concern += (" The write may already have succeeded. Check its effects with a read-only "
+                        "tool before attempting it again. For purchase orders use check_existing_orders.")
+        r.update(replan_requested=True, unrecovered_fault=True, recovery_concern=concern)
         return {"pending": r}
 
     def observe(state: AgentState) -> AgentState:
@@ -252,8 +273,7 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
                        "concern": r.get("recovery_concern", "")}
             instruction = "Replan using this concern." if r["replan_requested"] else "Review the retry evidence."
             messages.append(HumanMessage(
-                content=instruction + " A write may have taken effect on both attempts; "
-                "check for duplicate effects before continuing. Recovery evidence: " + _tool_content(details)))
+                content=instruction + " Recovery evidence: " + _tool_content(details)))
         step = state["step"] + 1
         out: AgentState = {"messages": messages, "trajectory": state["trajectory"] + [r] + retries,
                            "step": step, "pending": None}
@@ -281,6 +301,8 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
             return "observe"
         # A broken verifier is not evidence that a write should be executed again.
         if current["verifier_error"] or r["recovery_attempts"] >= 1:
+            return "replan"
+        if r["tool"] in HIGH_RISK_TOOLS or r["tool"] in MEDIUM_RISK_TOOLS:
             return "replan"
         return "recovery"
 
@@ -353,7 +375,8 @@ def run_episode(task, llm, policy: str = "A", seed: int = 0, fault_rate: float =
         final = {**last, "trajectory": traj,
                  "step": sum(r["origin"] == "agent" for r in traj), "done_reason": "error",
                  "final_summary": "", "llm_calls": last.get("llm_calls"),
-                 "usage": last.get("usage", {}), "oracle_pass": passed, "oracle_diff": diff}
+                 "usage": last.get("usage", {}), "oracle_pass": passed, "oracle_diff": diff,
+                 "error_details": error_details(e)}
 
     traj = final["trajectory"]
     agent_usage = final.get("usage", {})
@@ -381,5 +404,7 @@ def run_episode(task, llm, policy: str = "A", seed: int = 0, fault_rate: float =
         "verify_triggered": sum(1 for r in traj if r.get("verify_decision") and r["origin"] == "agent"),
         "invalid_calls": sum(1 for r in traj if r.get("invalid_call")),
         "wall_time_s": round(time.time() - t0, 3), "error": error or final.get("error"),
+        "error_details": final.get("error_details"),
+        "agent_responses": final.get("agent_responses", []),
         "trajectory": traj,
     }

@@ -2,10 +2,7 @@
 
 
 def retry_action(env, record):
-    """Repeat the action through the normal simulator and seeded fault injector.
-
-    Writes are not rolled back or deduplicated. Both attempts remain in the log.
-    """
+    """Repeat a read through the normal simulator and seeded fault injector."""
     retry = env.call(record["tool"], record["args"], origin="recovery")
     retry.update(recovery_of=record["step"], verify_decision=True,
                  trigger_reason="recovery_recheck", verifier_verdict=None,

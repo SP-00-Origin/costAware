@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CostAware Research Dashboard</title>
+<script src="/dashboard.js" defer></script>
+<style>
+:root { color-scheme:light; --paper:#f5f2ec; --surface:#fffdf8; --ink:#252b26; --muted:#575e55;
+  --line:#dcd8cc; --accent:#28594d; --accent-dark:#1e453c }
+* { box-sizing:border-box }
+body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.5 system-ui,sans-serif }
+main { max-width:1480px; margin:auto; padding:32px clamp(16px,4vw,52px) }
+header { border-top:4px solid var(--accent); padding:16px 0 22px }
+h1,h2 { font-family:Georgia,serif; font-weight:600; line-height:1.2 }
+h1 { margin:0 0 6px; font-size:clamp(30px,4.5vw,48px); letter-spacing:-.03em }
+h2 { font-size:23px; margin:0 0 12px }
+p { margin:0; color:var(--muted) }
+.workspace { display:grid; grid-template-columns:minmax(245px,285px) minmax(0,1fr); gap:18px; align-items:start }
+aside { display:grid; gap:14px }
+.panel { border:1px solid var(--line); background:var(--surface); padding:18px }
+label { display:block; font-weight:650; margin:0 0 6px; font-size:.9rem }
+select,button,.button { font:inherit; font-size:.9rem; min-height:39px; border:1px solid var(--line);
+  border-radius:3px; color:var(--ink); background:var(--surface); padding:7px 10px }
+select { width:100% }
+button,.button { cursor:pointer; font-weight:650; text-decoration:none }
+button:hover:not(:disabled),.button:hover { border-color:var(--accent); color:var(--accent) }
+button:disabled { opacity:.52; cursor:default }
+.primary { background:var(--accent); color:white; border-color:var(--accent); width:100%; margin-top:12px }
+.primary:hover:not(:disabled) { background:var(--accent-dark); color:white }
+:focus-visible { outline:2px solid var(--accent); outline-offset:3px }
+.meta { font-size:.85rem; margin-top:8px; min-height:1.4em; overflow-wrap:anywhere }
+.actions,.view-bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center }
+.actions { margin-top:12px }
+.view-bar { border-bottom:1px solid var(--line); margin-bottom:14px; align-items:stretch }
+.view-bar button { border:0; border-radius:0; background:transparent; border-bottom:2px solid transparent }
+.view-bar button[aria-pressed="true"] { color:var(--accent); border-bottom-color:var(--accent) }
+#status { align-self:center; margin-left:auto; font-size:.85rem }
+#notice { margin-top:10px; color:#8a4939 }
+iframe { display:block; width:100%; border:0; min-height:420px; background:var(--surface) }
+#console { margin:0; padding:16px; color:#efeee6; background:#242c27; min-height:320px;
+  max-height:62vh; overflow:auto; font:14px/1.6 ui-monospace,Consolas,monospace;
+  white-space:pre-wrap; overflow-wrap:anywhere }
+[hidden] { display:none!important }
+@media(max-width:760px) { .workspace { grid-template-columns:1fr } main { padding-top:18px } }
+</style>
+</head>
+<body><main>
+<header><h1>CostAware research dashboard</h1><p>Run experiments, inspect verifier behavior, and review saved results.</p></header>
+<div class="workspace">
+<aside aria-label="Experiment controls">
+  <form class="panel" id="experiment">
+    <h2>Run an experiment</h2>
+    <label for="config">Saved configuration</label>
+    <select id="config" required></select>
+    <p class="meta" id="config-info"></p>
+    <button class="primary" id="start" type="submit">Run experiment</button>
+  </form>
+  <section class="panel">
+    <h2>Saved runs</h2>
+    <label for="run">Select a run</label>
+    <select id="run"></select>
+    <p class="meta" id="run-info"></p>
+    <div class="actions">
+      <button id="analyze" type="button">Rebuild analysis</button>
+      <a class="button" id="download" hidden>Download JSONL</a>
+    </div>
+  </section>
+</aside>
+<section class="panel" aria-label="Research results and console">
+  <div class="view-bar" aria-label="Dashboard view">
+    <button id="results-button" type="button" aria-pressed="true" aria-controls="results">Results</button>
+    <button id="console-button" type="button" aria-pressed="false" aria-controls="console">Console</button>
+    <p id="status" role="status">Ready</p>
+  </div>
+  <div id="results">
+    <p id="empty">Select a saved run to see its metrics and graphs.</p>
+    <iframe id="report" title="Selected run metrics and charts" sandbox="allow-same-origin" hidden></iframe>
+  </div>
+  <pre id="console" aria-label="Command output" tabindex="0" hidden>Command output will appear here.</pre>
+  <p id="notice" role="alert" hidden></p>
+</section>
+</div>
+</main></body>
+</html>

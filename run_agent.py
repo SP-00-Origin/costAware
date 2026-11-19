@@ -42,7 +42,7 @@ def main(argv=None):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--task", default="T01", help="task id, comma-separated ids, or 'all'")
-    p.add_argument("--provider", choices=["anthropic", "groq", "scripted"], default="anthropic")
+    p.add_argument("--provider", choices=sorted(DEFAULT_MODELS), default="anthropic")
     p.add_argument("--model", default=None,
                    help=f"model id (defaults: anthropic {DEFAULT_MODELS['anthropic']}, groq {DEFAULT_MODELS['groq']})")
     p.add_argument("--policy", choices=list("ABCD"), default="A")

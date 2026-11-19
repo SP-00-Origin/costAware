@@ -95,7 +95,7 @@ def test_verifier_provider_outage_preserves_episode_and_does_not_retry():
     assert result["verifier_calls"] == 1 and result["recovery_attempts"] == 0
 
 
-def test_timeout_after_write_keeps_both_effects_and_oracle_detects_duplicate():
+def test_timeout_after_write_replans_with_state_check_instead_of_retrying():
     task = get_task("T01")
     injector = ReplayInjector([{"tool": "create_purchase_order",
                                "args": {"project_id": "PROJ-A", "quote_id": "Q1", "quantity": 10},
@@ -104,9 +104,23 @@ def test_timeout_after_write_keeps_both_effects_and_oracle_detects_duplicate():
     result = run_episode(task, make_llm("scripted", task=task), policy="B", injector=injector,
                          verifier_llm=ScriptedVerifier())
     writes = [r for r in result["trajectory"] if r["tool"] == "create_purchase_order"]
-    assert [r["true_result"]["po_id"] for r in writes] == ["PO-0001", "PO-0002"]
-    assert result["recovery_attempts"] == 1 and result["recovered_steps"] == 1
-    assert not result["oracle_pass"] and not result["oracle_diff"]["no_duplicate_orders"]["pass"]
+    assert [r["true_result"]["po_id"] for r in writes] == ["PO-0001"]
+    assert result["recovery_attempts"] == 0
+    assert writes[0]["replan_requested"]
+    assert "check_existing_orders" in writes[0]["recovery_concern"]
+    assert result["oracle_pass"] and result["oracle_diff"]["no_duplicate_orders"]["pass"]
+
+
+def test_truncated_agent_response_retries_once_and_counts_both_calls():
+    truncated = AIMessage(content="", response_metadata={"finish_reason": "length"},
+                          usage_metadata={"input_tokens": 3, "output_tokens": 4, "total_tokens": 7})
+    result = run_episode(get_task("T01"), ListModel([truncated, truncated]), policy="A")
+    assert result["done_reason"] == "truncated" and result["error"].startswith("TruncatedResponse")
+    assert result["llm_calls"] == 2 and result["steps"] == 0
+    assert result["agent_usage"] == {"input_tokens": 6, "output_tokens": 8}
+    assert [r["finish_reason"] for r in result["agent_responses"]] == ["length", "length"]
+    recovered = run_episode(get_task("T01"), ListModel([truncated, FINISH]), policy="A")
+    assert recovered["done_reason"] == "finish" and recovered["llm_calls"] == 2
 
 
 def test_cost_accounting_and_roundtrip_include_retry_checks(tmp_path):
@@ -128,7 +142,7 @@ def test_recovery_logs_replay_with_seeded_faults():
     injector = FaultInjector(seed=7, fault_rate=1, fault_types=["timeout"])
     result = run_episode(task, make_llm("scripted", task=task), policy="B", injector=injector,
                          seed=7, fault_rate=1, verifier_llm=ScriptedVerifier())
-    assert result["recovery_attempts"] == len(task.reference_solution)
+    assert result["recovery_attempts"] == 3  # Quotes, vendor status, and budget are reads.
     assert replay_records(task, result["trajectory"], 7, 1, fault_types=["timeout"]) == []
 
 

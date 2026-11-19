@@ -94,3 +94,19 @@ def test_provider_verifier_has_no_action_tools(provider, module, name, key, monk
     monkeypatch.setitem(sys.modules, module, SimpleNamespace(**{name: ProviderModel}))
     model = make_verifier_llm(provider, model="test-model")
     assert model.config["model"] == "test-model" and model.config["temperature"] == 0
+
+
+def test_groq_gpt_oss_verifier_requests_json_without_tools(monkeypatch):
+    class ProviderModel:
+        def __init__(self, **kwargs):
+            self.config = kwargs
+
+        def bind(self, **kwargs):
+            self.request = kwargs
+            return self
+
+    monkeypatch.setenv("GROQ_API_KEY", "test-placeholder")
+    monkeypatch.setitem(sys.modules, "langchain_groq", SimpleNamespace(ChatGroq=ProviderModel))
+    model = make_verifier_llm("groq", model="openai/gpt-oss-20b")
+    assert model.request == {"response_format": {"type": "json_object"}}
+    assert model.config["max_tokens"] == 2048

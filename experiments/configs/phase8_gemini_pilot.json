@@ -1,0 +1,12 @@
+{
+  "phase": 8,
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "verifier_model": "gemini-3.1-flash-lite",
+  "tasks": ["T01", "T11"],
+  "policies": ["A", "B", "C", "D"],
+  "seeds": [7],
+  "fault_rate": 0.25,
+  "max_steps": 30,
+  "policy_config": {"interval": 3, "confidence_threshold": 0.6}
+}

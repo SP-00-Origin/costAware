@@ -89,13 +89,35 @@ When a phase is finished, add its row with who did it. The AI uses "Done by" to 
   and the scripted verifier checks explicit errors only; no live reliability result.
 - Core Section 10 Phase 6 implementation is complete; Git review/commit/PR remain pending.
 
+## Phase 7 implementation on siddharth/phase7-harness
+
+- Added a config-driven A–D experiment runner, append-only JSONL, replayable summaries, matched comparisons against B, and a local HTML dashboard with episode traces.
+- The dashboard counts selected agent actions and actual verifier calls separately. Rechecks count only toward calls.
+- Gemini and OpenAI are available alongside the existing providers. The verifier uses its own tool-free model instance.
+- Offline validation: 348 tests passed. All 16 planned episodes completed in the scripted batch. The JSONL regenerated the summary, paired comparison, and dashboard.
+- Pending review and commit. After review, run a small matched Gemini pilot before freezing the Phase 8 experiment config. The scripted batch validates the harness and supplies no live reliability or pricing evidence.
+
+## Phase 8 Gemini preflight
+
+- Added live pilot and baseline configs and offline fault-label diagnostics to the dashboard. The 20-task baseline validates as 240 paired episodes.
+- The eight-episode pilot was interrupted while waiting for Gemini. A bounded T01 Policy A retry executed two tool actions and then ended in a recorded GoogleAPIError. Both logs are visible as incomplete or errored runs. No comparative live result is available yet.
+- The runner now records safe HTTP status details and uses bounded Gemini retries. A further T01 Policy A rerun recorded HTTP 503 Service Unavailable in run `071ccddc86584528afb8278a70331cec`. The eight-episode pilot and baseline are still pending.
+- Offline validation: 351 tests passed. Run the eight-episode pilot again when generation requests are stable, then use the baseline config.
+- Latest Gemini pilot (`859a497b89074c8db4653c6b41dbda3f`): five oracle passes in eight planned episodes. D passed both tasks with eight verifier calls and no verifier errors. Agent-side HTTP 503/504 errors stopped both B episodes and one C episode, leaving no completed pairs against B.
+
+## Phase 8 Groq pilot follow-up
+
+- Groq GPT-OSS agents now use a 4,096-token response budget. Episode reports record agent finish reasons, tool-call counts and token usage. A length-limited response without a usable tool call gets one retry.
+- The Groq GPT-OSS verifier requests JSON objects and validates the verdict. All verification policies send suspicious writes back to the agent with a read-only state-check instruction. Automatic recovery still retries reads once.
+- The original Groq pilot (`734152f2719d4dd7b76033ae0260b7f7`) exposed early stops and a duplicate write. Use the new matched pilot (`5f122c6ff6934e2bb525eeb813b6a38e`) to check the revised pipeline before freezing a baseline.
+- The revised pilot recorded one completed oracle pass (T01/A) and seven episode-level HTTP 429 errors. T01/B logged 17 verifier calls and zero automatic retries on writes flagged for replanning. Both D episodes stopped at the provider rate limit before tool execution. No complete matched comparison is available.
+
 ## Next
 
-Pre-commit review of all three Phase 6 steps with Krish remains pending. Krish runs
-Git commands, commits and pushes, then opens the Phase 6 PR before starting Phase 7
-(Logging + Harness) on a new agreed branch. Continue the original Section 10 baseline;
-see `docs/decisions.md`.
+Review the Phase 7 changes and scripted batch on `siddharth/phase7-harness`.
+After review, validate one small matched Gemini batch before freezing the Phase 8
+config. Continue the original Section 10 baseline; see `docs/decisions.md`.
 
 ## Phases after that
 
-7 logging + harness · 8 first real experiment · 9 scale the environment · 10 ablations · 11–12 τ-bench (optional) · 13 analysis and paper.
+8 first real experiment · 9 scale the environment · 10 ablations · 11–12 τ-bench (optional) · 13 analysis and paper.
