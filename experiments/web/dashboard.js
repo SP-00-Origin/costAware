@@ -105,7 +105,7 @@ async function poll() {
 
 async function launch(operation, target) {
   if (!target || submitting || status === "running") return;
-  if (operation === "run" && catalog.configs[target]?.provider !== "scripted"
+  if (operation === "run" && !["scripted", "ollama"].includes(catalog.configs[target]?.provider)
       && !confirm("Run this configuration with the live model provider? API usage may be billed.")) return;
   submitting = true;
   refreshControls();

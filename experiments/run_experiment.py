@@ -1,6 +1,7 @@
 """Run a matched experiment or rebuild artifacts from its JSONL log."""
 import argparse
 import itertools
+import hashlib
 import json
 import os
 import sys
@@ -13,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.agent.graph import run_episode
-from src.agent.llm import DEFAULT_MODELS, default_model, make_llm, make_verifier_llm
+from src.agent.llm import DEFAULT_MODELS, default_model, make_llm, make_verifier_llm, model_settings
 from src.environment.tasks import get_task, load_tasks
 from src.evaluation.analysis import write_project_dashboard, write_report
 from src.policies.config import validate_policy_config
@@ -23,7 +24,7 @@ from src.provider_errors import error_details, public_error
 def load_config(path):
     config = json.loads(path.read_text(encoding="utf-8"))
     required = {"provider", "tasks", "policies", "seeds", "fault_rate", "max_steps"}
-    allowed = required | {"model", "verifier_model", "policy_config", "phase"}
+    allowed = required | {"model", "verifier_model", "policy_config", "phase", "model_options", "max_total_tokens"}
     if not isinstance(config, dict) or not required <= config.keys() or config.keys() - allowed:
         raise ValueError("Invalid config fields")
     for key in ("tasks", "policies", "seeds"):
@@ -59,6 +60,10 @@ def load_config(path):
         config["model"] = "scripted-reference"
         config["verifier_model"] = "scripted-verifier"
     config["policy_config"] = validate_policy_config(config.get("policy_config"))
+    config['model_options'] = model_settings(provider, config.get('model_options'))
+    cap = config.get('max_total_tokens')
+    if cap is not None and (type(cap) is not int or cap < 1):
+        raise ValueError('max_total_tokens must be a positive integer or null')
     return config
 
 
@@ -77,8 +82,24 @@ def run_batch(config, directory, run_id, progress=None):
         plan.append(dict(episode_id=f"episode-{len(plan) + 1:04}", task_id=task_id,
                          trial=trial, seed=seed, policy=policy))
     provider = config["provider"]
+    snapshots = {task_id: get_task(task_id).model_dump() for task_id in config['tasks']}
+    runtime = {'experiment_version': 'validation-v2',
+               'dataset_sha256': hashlib.sha256((ROOT / 'tasks/tasks.jsonl').read_bytes()).hexdigest()}
+    runtime['source_sha256'] = {}
+    for name in ('src/agent/prompts.py', 'src/agent/graph.py', 'src/agent/llm.py', 'src/agent/ollama.py',
+                 'src/verifier/verifier.py', 'src/policies/policies.py', 'src/evaluation/oracle.py'):
+        runtime['source_sha256'][name] = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+    if provider == 'ollama':
+        from src.agent.ollama import local_model_metadata
+        try:
+            runtime['agent_model'] = local_model_metadata(config['model'])
+            runtime['verifier_model'] = local_model_metadata(config['verifier_model'])
+        except (OSError, ValueError, KeyError) as exc:
+            runtime['model_metadata_error'] = public_error(type(exc).__name__, error_details(exc))
+    total_tokens = 0
     with log_path.open("x", encoding="utf-8") as log:
-        append_event(log, "run_started", schema_version=1, run_id=run_id, config=config, plan=plan)
+        append_event(log, "run_started", schema_version=1, run_id=run_id, config=config,
+                     plan=plan, task_snapshots=snapshots, runtime=runtime)
         for index, item in enumerate(plan, 1):
             episode_id = item["episode_id"]
             task = get_task(item["task_id"])
@@ -87,9 +108,16 @@ def run_batch(config, directory, run_id, progress=None):
             label = f"{index}/{len(plan)}  {task.id}  policy {policy}  seed {item['seed']}"
             if progress:
                 progress(f"{label}  running")
+            if config.get('max_total_tokens') is not None and total_tokens >= config['max_total_tokens']:
+                append_event(log, 'episode_finished', episode_id=episode_id, status='error',
+                             result={'error': 'Between-episode token budget reached', 'budget_limit_reached': True})
+                if progress:
+                    progress(f'{label}  BUDGET STOP')
+                continue
             try:
-                agent = make_llm(provider, model=config["model"], task=task)
-                verifier = None if policy == "A" else make_verifier_llm(provider, config["verifier_model"])
+                agent = make_llm(provider, model=config["model"], task=task, options=config.get('model_options'))
+                verifier = None if policy == "A" else make_verifier_llm(provider, config["verifier_model"],
+                                                                        options=config.get('model_options'))
                 result = run_episode(task, agent, policy=policy, seed=item["seed"],
                                      fault_rate=config["fault_rate"], max_steps=config["max_steps"],
                                      policy_config=config["policy_config"], verifier_llm=verifier,
@@ -105,6 +133,7 @@ def run_batch(config, directory, run_id, progress=None):
                 if progress:
                     progress(f"{label}  ERROR  {failure['error']}")
                 continue
+            total_tokens += sum(result.get('usage', {}).values())
             for step in result.pop("trajectory"):
                 if step.get("verifier_error"):
                     step["verifier_error"] = public_error(step["verifier_error"].split(":", 1)[0],

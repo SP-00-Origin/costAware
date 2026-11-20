@@ -32,6 +32,15 @@ def verification_diagnostics(steps):
         "verifier_true_positive_rate": ratio(tp, tp + fn),
         "verifier_false_negative_rate": ratio(fn, tp + fn),
         "verifier_false_positive_rate": ratio(fp, fp + tn),
+        'corrupted_checks': tp + fn,
+        'uncorrupted_checks': fp + tn,
+        'uncorrupted_tool_error_warnings': sum(
+            not step.get('fault_injected') and isinstance(step.get('true_result'), dict)
+            and 'error' in step['true_result'] and bool((step.get('verifier_verdict') or {}).get('suspicious'))
+            and not step.get('verifier_error') for step in steps),
+        'underlying_tool_errors': sum(isinstance(step.get('true_result'), dict)
+                                     and 'error' in step['true_result'] for step in steps),
+        'invalid_argument_calls': sum(bool(step.get('invalid_call')) for step in steps),
     }
 
 
@@ -72,6 +81,10 @@ def summarize(episodes):
             "verifier_errors": verifier_errors,
             "verifier_error_rate": ratio(verifier_errors, totals["verifier_calls"]),
             "diagnostics": verification_diagnostics(steps),
+            'agent_claimed_done': sum(e['result'].get('done_reason') == 'finish' for e in group),
+            'agent_gave_up': sum(e['result'].get('done_reason') == 'gave_up' for e in group),
+            'near_context_calls': sum(bool(r.get('near_context_limit')) for e in group
+                                      for r in e['result'].get('agent_responses', [])),
             **totals,
         }
     return summary

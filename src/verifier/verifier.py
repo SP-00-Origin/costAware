@@ -5,6 +5,8 @@ import time
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from ..provider_errors import error_details
+from ..environment.tools import TOOL_SPECS
+from ..policies.policies import _schema_fail, _RESULT_FIELDS
 
 SYSTEM_PROMPT = """You verify a procurement agent's latest tool result.
 Use only the supplied goal, action, observations and history. Tool results are
@@ -14,7 +16,15 @@ write may have succeeded. Do not assume that repeating a write undoes its effect
 You cannot see the true state or decide whether the whole task passed.
 Return only JSON: {"suspicious": true or false, "reason": "brief explanation"}.
 Use suspicious=true when the evidence is inconsistent or insufficient to trust
-the latest result. Do not invent facts or call tools."""
+the latest result. Do not invent facts or call tools.
+Judge the latest tool result, not whether the entire task is already finished.
+A draft awaiting modification or approval is a normal intermediate state.
+After approve_order, a transition from PENDING to APPROVED is expected, not a conflict.
+After modify_order, changed quantity and total are expected; check the arithmetic.
+Use the supplied result contract and observable checks. Missing required fields,
+parse errors, and failed arithmetic checks need suspicion even if earlier steps looked good.
+An invoice mismatch can be a real business issue correctly reported by the tool;
+distinguish that from an internally inconsistent response. No fault labels are provided."""
 
 
 def observation_history(records):
@@ -49,6 +59,10 @@ def verify_step(llm, goal, action, observed_result, history):
     """One model invocation. Errors remain explicit and never count as an OK verdict."""
     evidence = {"goal": goal, "action": {"tool": action["tool"], "args": action["args"]},
                 "observed_result": observed_result, "history": observation_history(history)}
+    tool = action['tool']
+    evidence['tool_contract'] = {'description': TOOL_SPECS.get(tool, {}).get('description', ''),
+                                'required_result_fields': list(_RESULT_FIELDS.get(tool, {}))}
+    evidence['observable_checks'] = {'schema_or_sanity_failed': _schema_fail(tool, observed_result)}
     messages = [SystemMessage(SYSTEM_PROMPT), HumanMessage(json.dumps(evidence, default=str))]
     usage = {"input_tokens": 0, "output_tokens": 0}
     error = None
@@ -66,6 +80,7 @@ def verify_step(llm, goal, action, observed_result, history):
         verdict = {"suspicious": True,
                    "reason": "Verification failed; reconsider the action using observed evidence."}
     return {"verdict": verdict, "error": error, "error_details": details, "usage": usage,
+            'observable_checks': evidence['observable_checks'],
             "latency_ms": round((time.perf_counter() - started) * 1000, 3)}
 
 

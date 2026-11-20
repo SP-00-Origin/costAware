@@ -3,6 +3,7 @@ import json
 import math
 from collections import Counter
 from html import escape
+from .trajectory import episode_story
 
 
 def percent(value):
@@ -34,7 +35,7 @@ def render_project_dashboard(runs, skipped):
 <p>Run {escape(run["id"])} · fault rate {run["fault_rate"]:.0%}</p></div>
 <a href="{escape(run["href"])}">Open run details</a></div>
 <div class="scroll" tabindex="0" role="region" aria-label="Policy metrics for run {escape(run["id"])}">
-<table><thead><tr><th>Policy</th><th>Completed</th><th>Oracle success</th>
+<table><thead><tr><th>Policy</th><th>Finished without provider error</th><th>Oracle success</th>
 <th>Selected actions</th><th>Verifier calls</th><th>Selection rate</th><th>Calls / action</th>
 <th>Verifier tokens</th><th>Verifier time</th><th>Retries</th></tr></thead>
 <tbody>{''.join(rows)}</tbody></table></div></article>""")
@@ -127,6 +128,7 @@ def render_dashboard(header, episodes, summary, pairs):
         note = f'<section><h2>Run errors</h2><ul>{items}</ul>{partial}{missing_outcome}</section>'
     rows = []
     diagnostics = []
+    outcomes = []
     for policy, row in summary.items():
         cells = (
             policy, f'{row["completed"]}/{row["planned"]}',
@@ -140,13 +142,18 @@ def render_dashboard(header, episodes, summary, pairs):
         rows.append(f'<tr><th scope="row"><span class="swatch policy-{policy}">{policy}</span></th>'
                     + "".join(f"<td>{value}</td>" for value in cells[1:]) + "</tr>")
         diagnostic = row["diagnostics"]
+        outcomes.append('<tr>' + ''.join(f'<td>{escape(str(value))}</td>' for value in (
+            policy, row.get('agent_claimed_done', 0), row.get('agent_gave_up', 0),
+            diagnostic.get('underlying_tool_errors', 0), diagnostic.get('invalid_argument_calls', 0),
+            diagnostic.get('uncorrupted_tool_error_warnings', 0), row.get('near_context_calls', 0))) + '</tr>')
         counts = diagnostic["verdict_counts"]
         reasons = ", ".join(f"{reason}: {count}" for reason, count in sorted(diagnostic["triggers"].items()))
         values = (
-            percent(diagnostic["trigger_precision"]), percent(diagnostic["trigger_recall"]),
+            percent(diagnostic["trigger_precision"]) + f' ({diagnostic["selected_faulted_actions"]}/{diagnostic["selected_actions"]})',
+            percent(diagnostic["trigger_recall"]) + f' ({diagnostic["selected_faulted_actions"]}/{diagnostic["faulted_actions"]})',
             f'{diagnostic["selected_faulted_actions"]}/{diagnostic["faulted_actions"]}',
-            percent(diagnostic["verifier_false_positive_rate"]),
-            percent(diagnostic["verifier_false_negative_rate"]),
+            percent(diagnostic["verifier_false_positive_rate"]) + f' ({counts["fp"]}/{counts["fp"] + counts["tn"]})',
+            percent(diagnostic["verifier_false_negative_rate"]) + f' ({counts["fn"]}/{counts["fn"] + counts["tp"]})',
             sum(counts.values()), percent(row["verifier_error_rate"]), reasons or "—",
         )
         diagnostics.append(f'<tr><th scope="row">{policy}</th>'
@@ -162,10 +169,11 @@ def render_dashboard(header, episodes, summary, pairs):
         label = escape(f'{episode["task_id"]} · Policy {episode["policy"]} · '
                        f'seed {episode["seed"]} · {outcome}')
         payload = escape(json.dumps(episode, indent=2, ensure_ascii=False))
-        details.append(f"<details><summary>{label}</summary><pre>{payload}</pre></details>")
+        details.append(f"<details><summary>{label}</summary>{episode_story(episode)}"
+                       f"<h3>Raw episode record</h3><pre>{payload}</pre></details>")
     badge = ("Offline scripted run" if config["provider"] == "scripted" else
              f'{escape(config["provider"])} · {escape(config["model"])}')
-    headings = ("Policy", "Completed", "Oracle success", "Selected actions", "Verifier calls",
+    headings = ("Policy", "Finished without provider error", "Oracle success", "Selected actions", "Verifier calls",
                 "Selection rate", "Calls / action", "Verifier tokens", "Verifier time", "Retries",
                 "Verifier errors", "Faulted pass rate", "Faulted fail rate")
     comparison = []
@@ -196,6 +204,7 @@ section {{ background:var(--surface);border:1px solid var(--line);padding:clamp(
 td,th {{ padding:10px 8px;text-align:left;border-bottom:1px solid var(--line) }}
 thead th {{ vertical-align:bottom;background:#eeece3;color:var(--muted) }} tbody td {{ white-space:nowrap }}
 tbody tr:last-child > * {{ border-bottom:0 }}
+.timeline {{ min-width:1300px }} .timeline td {{ white-space:pre-wrap;vertical-align:top;min-width:140px;max-width:340px;overflow-wrap:anywhere }}
 .policy-A {{ --policy:#4d5b65 }} .policy-B {{ --policy:#8a4939 }}
 .policy-C {{ --policy:#765a24 }} .policy-D {{ --policy:#28594d }} .policy-shared {{ --policy:#434a42 }}
 .swatch,.point {{ background:var(--policy);color:white;font-weight:700;font-size:.74rem;line-height:1.3;
@@ -225,19 +234,31 @@ a:focus-visible,summary:focus-visible,.scroll:focus-visible {{ outline:2px solid
 {reliability_plot(summary)}</section>
 <section><h2>Policy comparison</h2>
 <p>Success uses all planned episodes when a policy has completed at least one episode.
-Verifier calls include retry rechecks.</p>
+Verifier calls include retry rechecks. A finished episode can be a task failure or an agent giving up.
+Faulted pass/fail rates describe outcomes, not proven recovery or causal effects of faults.</p>
 <div class="scroll" tabindex="0" role="region" aria-label="Policy comparison table"><table><thead><tr>{''.join(f'<th scope="col">{name}</th>' for name in headings)}</tr></thead>
 <tbody>{''.join(rows)}</tbody></table></div></section>
 <section><h2>Verification diagnostics</h2>
 <p>Selection uses original agent actions. Verdict rates use valid checks, including retry checks.
-Injected faults are the reference labels. An uncorrupted response can still warrant suspicion.</p>
+Injected faults are the reference labels. An uncorrupted response can still warrant suspicion.
+An uncorrupted-result warning is not automatically a mistaken alarm; genuine tool errors
+and historical conflicts are included. Zero false negatives only describes corrupted results actually checked.</p>
 <div class="scroll" tabindex="0" role="region" aria-label="Verification diagnostics table">
 <table><thead><tr><th>Policy</th><th>Trigger precision</th><th>Trigger recall</th><th>Faulted actions selected</th>
-<th>False positive rate</th><th>False negative rate</th><th>Valid verdicts</th><th>Verifier error rate</th>
+<th>Warnings on uncorrupted results (injection-label FPR)</th><th>Accepted corrupted results (FNR)</th><th>Valid verdicts</th><th>Verifier error rate</th>
 <th>Trigger reasons</th></tr></thead><tbody>{''.join(diagnostics)}</tbody></table></div></section>
 <section><h2>Matched comparisons with Policy B</h2>
 <p>Completed pairs only. Outcome intervals resample whole tasks. Small batches are intended for validation.</p>
 <ul>{''.join(comparison) or '<li>No completed pairs with Policy B.</li>'}</ul></section>
+<section><h2>Stopping reasons and diagnostic context</h2>
+<p>Agent claims are separate from oracle success. Genuine tool errors can correctly trigger warnings.
+Context warnings indicate reported usage near the configured capacity, not proof of which content was lost.</p>
+<div class="scroll"><table><thead><tr><th>Policy</th><th>Agent claimed done</th><th>Gave up</th>
+<th>Underlying tool errors</th><th>Invalid argument calls</th><th>Warnings on uncorrupted tool errors</th>
+<th>Agent calls near context capacity</th></tr></thead><tbody>{''.join(outcomes)}</tbody></table></div></section>
 <section id="episode-traces"><h2>Episode traces</h2>{''.join(details)}</section>
+<section><h2>Recorded runtime and task identity</h2><pre>{escape(json.dumps(header.get('runtime', {'note': 'Runtime identity not recorded in this older run.'}), indent=2))}</pre>
+<p>Raw task snapshots are retained in new JSONL headers. Older results retain their original oracle verdicts.
+Regenerating a report does not rerun its tasks or change their acceptance criteria.</p></section>
 <section><h2>Run configuration</h2><pre>{escape(json.dumps(config, indent=2))}</pre></section>
 </main></body></html>"""

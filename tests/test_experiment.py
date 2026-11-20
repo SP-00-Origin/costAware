@@ -12,6 +12,24 @@ from src.evaluation.metrics import summarize, verification_diagnostics
 CONFIG = Path(__file__).resolve().parents[1] / "experiments/configs/phase7_smoke.json"
 
 
+def test_ollama_uses_local_server_without_cloud_keys(monkeypatch):
+    from src.agent.llm import make_llm, make_verifier_llm
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("COSTAWARE_AGENT_MODEL", raising=False)
+    agent = make_llm("ollama")
+    verifier = make_verifier_llm("ollama")
+    assert agent.model == 'qwen3:8b'
+    assert agent.settings['num_ctx'] == 8192
+    assert agent.settings['seed'] == 7
+    assert agent.thinking is False
+    assert agent.tools and not verifier.tools
+    assert verifier.json_output
+    config = load_config(CONFIG.parent / "phase8_ollama_pilot.json")
+    assert config["provider"] == "ollama"
+    assert config["policies"] == ["A", "B", "C", "D"]
+
+
 def test_verification_diagnostics_distinguish_selection_retry_and_provider_errors():
     steps = [
         dict(origin="agent", verify_decision=True, fault_injected="wrong_value",

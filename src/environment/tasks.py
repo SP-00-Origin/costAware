@@ -168,6 +168,6 @@ def generate_procurement_task(seed: int, task_id: Optional[str] = None) -> Task:
                           "procurement_rules": {"require_approval_above": threshold}}],
             "budgets": [{"id": bud_id, "allocated": allocated}],
         },
-        expected_final_state={"orders": [order_req], "max_new_orders": 1},
+        expected_final_state={"orders": [order_req]},
         reference_solution=ref,
     )

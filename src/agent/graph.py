@@ -158,7 +158,15 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
             update["usage"] = _add_usage(update["usage"], ai)
             update["agent_responses"].append({"call": update["llm_calls"], "step": state["step"],
                                               "attempt": attempt, "finish_reason": reason,
-                                              "tool_call_count": len(calls), **usage})
+                                              "tool_call_count": len(calls),
+                                              'near_context_limit': ai.response_metadata.get('near_context_limit'),
+                                              'context_length': ai.response_metadata.get('context_length'), **usage})
+            update['agent_responses'][-1]['public_text'] = ai.content if isinstance(ai.content, str) else ''
+            logged_calls = copy.deepcopy(calls)
+            for logged in logged_calls:
+                if '_confidence' in logged['args']:
+                    logged['args']['_confidence'] = parse_confidence(logged['args']['_confidence'])
+            update['agent_responses'][-1]['tool_calls'] = logged_calls
             if reason != "length" or calls:
                 break
         if reason == "length" and not calls:
@@ -225,7 +233,8 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
                             {"tool": current["tool"], "args": current["args"]},
                             current["observed_result"], history)
         current.update(verifier_verdict=check["verdict"], verifier_error=check["error"],
-                       verifier_usage=check["usage"], verifier_latency_ms=check["latency_ms"])
+                       verifier_usage=check["usage"], verifier_latency_ms=check["latency_ms"],
+                       observable_checks=check['observable_checks'])
         if check["error_details"]:
             current["verifier_error_details"] = check["error_details"]
         # Recovered means the verifier accepted the retry, not that the oracle passed.
@@ -252,7 +261,11 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
         r = dict(state["pending"])
         current = r["recovery_records"][-1] if r["recovery_records"] else r
         concern = current["verifier_verdict"]["reason"]
-        if r["tool"] in HIGH_RISK_TOOLS or r["tool"] in MEDIUM_RISK_TOOLS:
+        observed = current['observed_result']
+        persistent = isinstance(observed, dict) and 'error' in observed and not observed.get('timeout')
+        if r.get('invalid_call') or persistent:
+            concern += ' Correct the arguments or discover valid IDs using a read; do not repeat the same failing call.'
+        elif r["tool"] in HIGH_RISK_TOOLS or r["tool"] in MEDIUM_RISK_TOOLS:
             concern += (" The write may already have succeeded. Check its effects with a read-only "
                         "tool before attempting it again. For purchase orders use check_existing_orders.")
         r.update(replan_requested=True, unrecovered_fault=True, recovery_concern=concern)
@@ -302,6 +315,10 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
         # A broken verifier is not evidence that a write should be executed again.
         if current["verifier_error"] or r["recovery_attempts"] >= 1:
             return "replan"
+        observed = current['observed_result']
+        if r.get('invalid_call') or (isinstance(observed, dict) and 'error' in observed
+                                    and not observed.get('timeout')):
+            return 'replan'
         if r["tool"] in HIGH_RISK_TOOLS or r["tool"] in MEDIUM_RISK_TOOLS:
             return "replan"
         return "recovery"

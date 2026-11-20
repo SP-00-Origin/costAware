@@ -28,6 +28,7 @@ DEFAULT_MODELS = {
     "groq": "llama-3.3-70b-versatile",
     "gemini": "gemini-3.1-flash-lite",
     "openai": "gpt-4o-mini",
+    "ollama": "qwen3:8b",
     "scripted": "scripted-reference",
 }
 DEFAULT_MODEL = os.environ.get("COSTAWARE_AGENT_MODEL", DEFAULT_MODELS["anthropic"])
@@ -56,8 +57,40 @@ def tool_schemas() -> List[Dict[str, Any]]:
     return schemas
 
 
-def _make_chat_model(provider, model, temperature, max_tokens):
+def model_settings(provider, options=None):
+    """Resolve settings once so the actual choices can be stored in run logs."""
+    settings = {'agent_max_tokens': 4096 if provider == 'groq' else 1024,
+                'verifier_max_tokens': 2048 if provider in ('groq', 'ollama') else 512,
+                'temperature': 0.0}
+    if provider == 'ollama':
+        settings.update(agent_max_tokens=2048, verifier_max_tokens=1024,
+                        context_length=8192, model_seed=7, thinking=False, timeout_s=180)
+    if options is None:
+        options = {}
+    if not isinstance(options, dict) or options.keys() - settings.keys():
+        raise ValueError('Unknown model options')
+    settings.update(options)
+    for key in ('agent_max_tokens', 'verifier_max_tokens', 'context_length', 'timeout_s'):
+        if key in settings and (type(settings[key]) is not int or settings[key] < 1):
+            raise ValueError(f'{key} must be a positive integer')
+    if type(settings['temperature']) not in (int, float) or not 0 <= settings['temperature'] <= 2:
+        raise ValueError('temperature must be between 0 and 2')
+    if provider == 'ollama':
+        if type(settings['thinking']) is not bool or type(settings['model_seed']) is not int:
+            raise ValueError('Invalid local thinking or model seed')
+        if settings['context_length'] <= max(settings['agent_max_tokens'], settings['verifier_max_tokens']):
+            raise ValueError('Context must exceed each response limit')
+    return settings
+
+
+def _make_chat_model(provider, model, temperature, max_tokens, options=None):
     """Create a provider model before assigning agent tools or verifier prompts."""
+    if provider == "ollama":
+        from .ollama import OllamaChatModel
+        settings = model_settings(provider, options)
+        return OllamaChatModel(model or default_model(provider), temperature, max_tokens,
+                               settings['context_length'], settings['model_seed'],
+                               settings['thinking'], settings['timeout_s'])
     if provider == "gemini":
         key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not key:
@@ -92,29 +125,36 @@ def _make_chat_model(provider, model, temperature, max_tokens):
 
 
 def make_llm(provider: str = "anthropic", model: Optional[str] = None, task=None,
-             temperature: float = 0.0, max_tokens: Optional[int] = None):
+             temperature: float = 0.0, max_tokens: Optional[int] = None, options=None):
     """Return a tool-bound chat model ready for graph use."""
     if provider == "scripted":
         if task is None:
             raise ValueError("scripted provider needs the task")
         return ScriptedChatModel(task.reference_solution)
+    settings = model_settings(provider, options)
     if max_tokens is None:
-        max_tokens = 4096 if provider == "groq" else 1024
-    llm = _make_chat_model(provider, model, temperature, max_tokens)
+        max_tokens = settings['agent_max_tokens']
+    temperature = settings['temperature'] if options else temperature
+    llm = _make_chat_model(provider, model, temperature, max_tokens, options)
     if provider == "gemini":
         return llm.bind_tools(tool_schemas())
     return llm.bind_tools(tool_schemas(), parallel_tool_calls=False)
 
 
-def make_verifier_llm(provider: str = "anthropic", model: Optional[str] = None):
+def make_verifier_llm(provider: str = "anthropic", model: Optional[str] = None, options=None):
     """Separate model instance without action tools; uses the existing provider libraries."""
     if provider == "scripted":
         from ..verifier.verifier import ScriptedVerifier
         return ScriptedVerifier()
-    if provider == "groq" and (model or default_model(provider)).startswith("openai/gpt-oss-"):
-        llm = _make_chat_model(provider, model, temperature=0.0, max_tokens=2048)
+    settings = model_settings(provider, options)
+    if provider == 'ollama':
+        llm = _make_chat_model(provider, model, 0.0, settings['verifier_max_tokens'], options)
+        llm.json_output = True
+        return llm
+    if provider == "groq" and (model or default_model(provider)).startswith("openai/gpt-oss-" ):
+        llm = _make_chat_model(provider, model, temperature=0.0, max_tokens=settings['verifier_max_tokens'])
         return llm.bind(response_format={"type": "json_object"})
-    return _make_chat_model(provider, model, temperature=0.0, max_tokens=512)
+    return _make_chat_model(provider, model, temperature=0.0, max_tokens=settings['verifier_max_tokens'])
 
 
 class ScriptedChatModel:

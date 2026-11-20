@@ -89,10 +89,14 @@ def rules(project, owner, budget, threshold):
     return (f"Project {project} is owned by {owner} and funded by budget {budget}. "
             f"Orders with a total above {threshold:,} require manager approval (requested by {owner}) "
             f"before release. Only use vendors that are approved and not suspended, never exceed the "
-            f"budget, never order from an expired quote, and never create duplicate orders.")
+            f"budget, never order from an expired quote, and never leave duplicate active orders.")
 
 
 def task(id, family, tier, goal, state, expected, ref, negatives=()):
+    # Corrective cancellation/replacement is allowed; explicit zero-creation rules remain.
+    expected = dict(expected)
+    if expected.get('max_new_orders', 0) > 0:
+        expected.pop('max_new_orders')
     return {"id": id, "family": family, "tier": tier, "goal": goal, "initial_state": state,
             "expected_final_state": expected, "reference_solution": ref,
             "negatives": [{"name": n, "trajectory": t} for n, t in negatives]}

@@ -13,6 +13,7 @@ What is done, what is next, and what to know before starting. Updated after each
 | 4 | LangGraph agent, `run_agent.py`, one JSONL log per episode | Krish | `src/agent/` |
 | 5 | Self-verifier, one-retry recovery, replanning concerns, logs and offline demo | Krish | `src/verifier/`, `src/agent/graph.py`, `scripts/demo_recovery.py` |
 | 6 | Configurable A–D timing, observed-result checks, action confidence and comparison demo | Krish | `src/policies/`, `src/agent/`, `scripts/demo_policies.py` |
+| 7 | Core config-driven harness, JSONL/parser, metrics, dashboard and readable traces; final engineering gate passed 2026-11-21 | Siddharth; Shivam (local validation) | `experiments/`, `src/evaluation/`, `docs/PHASE7_CHECKS_AND_PHASE8_START.md` |
 
 When a phase is finished, add its row with who did it. The AI uses "Done by" to decide whether to test the next person (`repo_instructions.md` §3a).
 
@@ -114,9 +115,114 @@ When a phase is finished, add its row with who did it. The AI uses "Done by" to 
 
 ## Next
 
-Review the Phase 7 changes and scripted batch on `siddharth/phase7-harness`.
-After review, validate one small matched Gemini batch before freezing the Phase 8
-config. Continue the original Section 10 baseline; see `docs/decisions.md`.
+### Phase 7 final check and documentation — 2026-11-21
+
+- On Shivam's request, use existing `shivam_branch` (exact spelling), fast-forwarded
+  from 4421c65 to the already fetched main commit c511c37, preserving all work.
+- Final offline gate: 387 tests passed, all 20 tasks validated, and scripted run
+  `4d289b3ea7fb4bcfbd64b1354cf9d9f2` completed 16/16 episodes with oracle PASS.
+  Reports rebuilt from JSONL with unchanged summaries; all 16 trajectories replayed
+  exactly. This completes the original Section 10 Phase 7 engineering criterion,
+  not every cost/budget feature of the expanded metrics plan.
+- README rewritten around the problem, setup/policies, simulation and providers.
+  Added `docs/edits/EXPERIMENT_SETUP_CHANGES.md`, `docs/OLLAMA_SETUP.md`,
+  `docs/RUN_COMMANDS.md` and `docs/PHASE7_CHECKS_AND_PHASE8_START.md`.
+  Local documentation links resolve and documented CLI entry points were checked.
+- Phase 8 startup is documented, not executed: review T18/context behavior, agree
+  acceptance and runtime settings, validate multiple seeds, then freeze the first
+  20-task × four-policy × three-seed baseline. Existing Gemini config has 240 episodes;
+  a local-Qwen baseline config has not yet been frozen.
+
+### Implemented local validation improvements — 2026-11-20
+
+- Shivam approved recovery replacements and deferred cancellation fees. Procurement
+  tasks no longer have positive creation caps; explicit zero caps and active duplicate
+  checks remain. Task data was regenerated and all reference/negative tests pass.
+- Added native Ollama requests with explicit 8192 context, agent/verifier response
+  limits 2048/1024, temperature 0, model seed 7, thinking off and bounded timeout.
+  Groq/Gemini and other providers remain. Optional total-token budgets stop between
+  episodes; they are not hard spending caps. Local validation has no aggregate cap.
+- Verifiers share tool contracts and observable checks across B/C/D, with valid
+  workflow guidance. Persistent argument errors replan without identical retries.
+  Shared agent instructions distinguish vendor properties, approval and release.
+- Reports now show readable per-action scenarios and raw records: observations,
+  selection reasons, verdicts, retry/replan instructions, next actions and offline
+  corruption differences. No report-generation model calls or invented reasoning.
+  Outcome/diagnostic labels and denominators are clearer; true tool errors are separate.
+- New headers retain task snapshots, dataset/source hashes, resolved settings and
+  local model identity. Historical oracle verdicts are not re-evaluated when rendering.
+- Validation: 387 offline tests passed. New clean run
+  `85d027114e304d58b6165fcaa551016c` and faulted run
+  `dc07f0703a9d4805ab481c482f8c99d0`: 20 episodes each, A/B/C/D each pass 4/5
+  in both conditions; clean verifier calls 0/45/14/15, faulted 0/71/19/27.
+  All 40 trajectories and oracle diffs replay from recorded task snapshots;
+  zero provider/verifier-format errors. T18 fails under every policy, including clean.
+- Combined review: `output/qwen_validation_v2_review/index.html`, with audit JSON.
+  The only source fingerprint difference across batches is llm.py input validation
+  rejecting non-mapping options; actual resolved settings, prompts and graph match.
+- Remaining: T18 vendor/evidence tracking is unreliable. Faulted T18/B reports five
+  near-context calls at 8192 capacity. Review these before a full baseline; one-seed
+  validation cannot establish policy superiority. Changes remain uncommitted on main.
+
+### Local Qwen pilot — 2026-11-20
+
+- Shivam requested a local Qwen run before deciding where to commit the changes.
+  Added `ollama` alongside all existing providers on the current `main` checkout;
+  changes remain uncommitted. No branch was created and nothing was pushed.
+- `experiments/configs/phase8_ollama_pilot.json` matches the Gemini pilot grid:
+  T01/T11, A–D, seed 7, fault rate 0.25, max 30 actions, model `qwen3:8b`.
+  Agent and tool-free JSON verifier use separate local clients. Thinking is disabled.
+- Run `49593c0bab404216bed50ace7fbb3113`: all eight episodes completed with oracle
+  PASS; zero provider/verifier errors. A/B/C/D verifier calls: 0/24/8/8.
+  T01/B ended with `gave_up` despite an oracle-passing final state; inspect its trace.
+- Raw JSONL, summary, paired comparisons and dashboard are under
+  `output/experiments/49593c0bab404216bed50ace7fbb3113/`; `output/dashboard.html`
+  includes this run. These are generated local outputs, not files to commit.
+- Runtime: RTX 4060 Laptop, Qwen Q4_K_M digest `500a1f067a9f`, 4,096-token context.
+  This is a two-task feasibility pilot, not a full baseline or reliability conclusion.
+- Validation in `costaware_env`: 355 tests passed; `git diff --check` passed.
+  Next: review the pilot and context needs, then decide the branch/commit destination
+  before freezing or running a larger baseline. Groq and Gemini configs remain available.
+- Audit follow-up (2026-11-20): all eight trajectories replay identically, oracle
+  results reproduce, policy decisions and independently counted confusion metrics
+  match the saved reports. All 40 modified-final-state negative controls are rejected;
+  355 tests pass again. Local audit artifacts are under `output/`.
+  False-positive labels measure absence of injected corruption, not necessarily
+  unjustified suspicion (tool errors/history conflicts can be counted).
+  T01/B's final prompt approaches the 4096-token context limit; context-related
+  loss is not established by the saved logs. Do not infer verifier misses are due
+  to context: their prompts were well below that limit.
+- Expanded Qwen review (2026-11-20), run `aad413e9cc96469fb300c1c5bbb10bbb`:
+  T05/T14/T18 under A–D, same seed 7 and settings, 12 finished episodes.
+  Combined with T01/T11: A 4/5, B 3/5, C 4/5, D 4/5 oracle passes;
+  verifier calls 0/53/23/27. All T18 policies fail; T14/B also fails.
+  No provider/verifier errors; real tool errors and agent mistakes are recorded.
+- Combined audit/dashboard: `output/qwen_collective_review/`. All 20 trajectories
+  and oracle diffs reproduce, five clean reference solutions pass, 63 altered
+  successful final states are rejected. 355 tests pass. No model prompt, policy,
+  recovery or metric behavior was changed during this review.
+- Findings: T14/B stops with an APPROVED rather than RELEASED order. T18/A selects
+  an unapproved vendor despite clean evidence; B gets stuck on an invented vendor ID;
+  C/D retain the old order and create an invalid replacement. D's corrupted status
+  observations also provoke a failed cancellation attempt. These are not all caused
+  by injected faults. Context pressure affects longer B/C/D trajectories; exact
+  content loss is not established by the logs. Review verifier semantics, metric
+  interpretation, persistent-error retries and runtime metadata before a baseline.
+- Suspended-vendor controls (2026-11-20): 12 deterministic graph checks on T08
+  confirm warning ignored -> suspended-vendor order -> oracle FAIL; warning followed
+  under B/C/D -> valid-vendor order -> PASS; selected but verifier misses -> FAIL.
+  These use test stand-ins, not Qwen performance results. Artifacts:
+  `output/suspended_vendor_controls/summary.json`.
+- Acceptance-rule finding: cancel a bad T08 draft, create a valid replacement,
+  approve/release it -> all other oracle checks pass, but `max_new_orders=1` fails
+  because cancelled orders still count as created. With cap 2 the same state passes.
+  The actual task was not changed. Review whether bounded corrective replacements
+  should be permitted before interpreting recovery performance; preserve active
+  duplicate prevention. Details: `output/suspended_vendor_controls/recovery_limit.json`.
+
+Review the local validation changes and readable T18 traces, decide the branch/commit
+destination, and resolve the context/evidence limitations before freezing a larger
+Phase 8 baseline. See `docs/decisions.md` for the pending team-review decisions.
 
 ## Phases after that
 
