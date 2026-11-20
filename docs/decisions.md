@@ -1,5 +1,24 @@
 # Decisions
 
+## Local validation changes (2026-11-20, pending team review)
+
+- Shivam: "In a real-world scenario, a company or person would cancel a problematic
+  order because accepting it would cost too much." Remove positive order-creation
+  caps from procurement tasks so cancelled drafts can be replaced. Retain zero caps
+  where the task forbids creating orders, and retain active-duplicate checks.
+  Shivam selected "Recovery allowed; defer cancellation fees". No fees are added.
+- Validate observation faults using decision-critical controls rather than forcing
+  every corrupted response to produce failure. The oracle still checks true state.
+- Make reports readable directly from logs, with no report-generation model calls.
+  Report injected-corruption diagnostics separately from genuine tool errors and
+  historical concerns. Do not invent agent reasoning or attribute every failure to faults.
+- Local pilot settings explicitly specify context, response limits, temperature,
+  model seed and thinking. Context capacity is different from an API billing quota;
+  bounded steps/responses remain operational safeguards. Retain prior run artifacts.
+- Verifier contracts/observable diagnostics are identical across B/C/D, with valid
+  intermediate workflow guidance. Persistent argument errors replan rather than retry
+  unchanged. These behavior changes require new runs and are not retroactive results.
+
 Everything the team has decided, in order. Details and reasons are in the plan (`Cost_Aware_Adaptive_Verification_Updated_Implementation_Plan.md`) and in `PHASES_1-4.md`.
 
 ## Design (September 2026)
