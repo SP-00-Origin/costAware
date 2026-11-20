@@ -4,7 +4,7 @@
 
 ## For everyone
 
-1. Don't push to `main`. Only Krish (`krish01info`) merges into `main`.
+1. Don't push to `main`. 
 2. One branch per task, named `<your-name>/<task>`. Example: `krish/phase5-verifier`. Start it from whichever branch you need: `main`, or another branch if your work builds on it. Before you start work, and again before opening a pull request, bring in the latest changes from GitHub.
 3. The project is one codebase that grows phase by phase (see the plan in `docs/`). New work goes into the existing folders (`src/`, `tests/`, `tasks/`, `scripts/`), not into a copy of them.
 4. Work on one phase at a time. Finish a phase, open a pull request, then start the next one on a new branch.
