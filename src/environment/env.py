@@ -47,6 +47,11 @@ class ProcurementEnv:
             true_result = {"error": err}
         else:
             true_result = execute_tool(self.sim, tool, clean_args)
+        if (self.task.expected_final_state.get('vendor_approval_required', True) is False
+                and tool in ('get_vendor_details', 'check_vendor_status')):
+            # Variant API omits irrelevant metadata before injection, so faults
+            # cannot target a supplier-approval field that this rule does not use.
+            true_result.pop('approved', None)
         self.sim.advance_step()
         return {
             "step":         step,

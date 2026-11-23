@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 from src.agent.graph import run_episode
 from src.agent.llm import DEFAULT_MODELS, default_model, make_llm, make_verifier_llm, model_settings
 from src.environment.tasks import get_task, load_tasks
+from src.environment.variants import VENDOR_RULES, vendor_rule_task
 from src.evaluation.analysis import write_project_dashboard, write_report
 from src.policies.config import validate_policy_config
 from src.provider_errors import error_details, public_error
@@ -24,7 +25,7 @@ from src.provider_errors import error_details, public_error
 def load_config(path):
     config = json.loads(path.read_text(encoding="utf-8"))
     required = {"provider", "tasks", "policies", "seeds", "fault_rate", "max_steps"}
-    allowed = required | {"model", "verifier_model", "policy_config", "phase", "model_options", "max_total_tokens"}
+    allowed = required | {"model", "verifier_model", "policy_config", "phase", "model_options", "max_total_tokens", "vendor_rule"}
     if not isinstance(config, dict) or not required <= config.keys() or config.keys() - allowed:
         raise ValueError("Invalid config fields")
     for key in ("tasks", "policies", "seeds"):
@@ -49,6 +50,9 @@ def load_config(path):
     if type(config["max_steps"]) is not int or config["max_steps"] < 1:
         raise ValueError("max_steps must be a positive integer")
     config.setdefault("phase", 7)
+    config.setdefault('vendor_rule', 'qualified')
+    if config['vendor_rule'] not in VENDOR_RULES:
+        raise ValueError('Unknown vendor_rule')
     if type(config["phase"]) is not int or config["phase"] < 1:
         raise ValueError("phase must be a positive integer")
     for key in ("model", "verifier_model"):
@@ -82,11 +86,14 @@ def run_batch(config, directory, run_id, progress=None):
         plan.append(dict(episode_id=f"episode-{len(plan) + 1:04}", task_id=task_id,
                          trial=trial, seed=seed, policy=policy))
     provider = config["provider"]
-    snapshots = {task_id: get_task(task_id).model_dump() for task_id in config['tasks']}
+    tasks = {task_id: vendor_rule_task(get_task(task_id), config.get('vendor_rule', 'qualified'))
+             for task_id in config['tasks']}
+    snapshots = {task_id: task.model_dump() for task_id, task in tasks.items()}
     runtime = {'experiment_version': 'validation-v2',
                'dataset_sha256': hashlib.sha256((ROOT / 'tasks/tasks.jsonl').read_bytes()).hexdigest()}
     runtime['source_sha256'] = {}
-    for name in ('src/agent/prompts.py', 'src/agent/graph.py', 'src/agent/llm.py', 'src/agent/ollama.py',
+    for name in ('src/agent/prompts.py', 'src/agent/graph.py', 'src/agent/llm.py', 'src/agent/ollama.py', 'src/environment/evidence.py',
+                 'src/environment/tools.py', 'src/environment/env.py', 'src/environment/variants.py',
                  'src/verifier/verifier.py', 'src/policies/policies.py', 'src/evaluation/oracle.py'):
         runtime['source_sha256'][name] = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
     if provider == 'ollama':
@@ -102,7 +109,7 @@ def run_batch(config, directory, run_id, progress=None):
                      plan=plan, task_snapshots=snapshots, runtime=runtime)
         for index, item in enumerate(plan, 1):
             episode_id = item["episode_id"]
-            task = get_task(item["task_id"])
+            task = tasks[item['task_id']].model_copy(deep=True)
             policy = item["policy"]
             append_event(log, "episode_started", episode_id=episode_id, goal=task.goal)
             label = f"{index}/{len(plan)}  {task.id}  policy {policy}  seed {item['seed']}"

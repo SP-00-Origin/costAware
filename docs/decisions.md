@@ -1,5 +1,48 @@
 # Decisions
 
+## Primary Phase 8 rule and additional-seed validation (2026-11-22)
+
+- Shivam accepted retaining the original qualified supplier rule for the primary
+  baseline and testing T08/T10/T16/T18 with additional seeds before full collection.
+  Keep suspension_only as a separately labelled alternative, not pooled data.
+- Use additional fault seeds 12/23 with fixed model generation seed 7 for readiness.
+  Clean repeats measure stability; they are not independent random model samples.
+- Retain solvable task failures as results. Do not remove T18, relax a rule or tune
+  prompts merely to raise scores during baseline collection. Primary full config
+  is prepared for all 20 tasks, A–D, fault seeds 7/12/23 at rate 0.25.
+
+## Supplier standing rule variant (2026-11-22, pending team review)
+
+- Shivam: "there should be a correct distinction made between suspended and not
+  suspended". He proposed removing supplier approved/unapproved as a purchase
+  criterion, while keeping suspension as a prohibition, if this preserves the
+  verification research goal. He also requested tests beyond repeatedly failing T18.
+- Retain the original qualified benchmark as the default. Add an explicit
+  vendor_rule=suspension_only alternative: supplier approval is ignored, eligibility
+  and non-suspension remain required. Manager approval of purchase orders, budgets,
+  expiry, quantities, duplicate prevention and recovery rules are unchanged.
+- Apply the rule consistently to task goals, observed response contracts, summary,
+  policy diagnostics, verifier, oracle and reference/negative controls. Omit the
+  unused supplier-approval field from variant public responses before injection.
+  Retain legacy state metadata and original dataset/recorded outcomes.
+- In alternative T18, V2/QY2 is the cheapest legal replacement; the negative uses
+  suspended V3. The variant is separately labelled in configurations and dashboards.
+  A higher score under a weaker supplier rule is not model/verifier improvement.
+  Freeze one business-rule definition before the final baseline; do not pool modes.
+
+## Observed evidence presentation (2026-11-22, pending team review)
+
+- Shivam requested reducing avoidable environment/summary difficulty before judging
+  Qwen. Use a compact shared observed record with vendor standing, quote links,
+  order lifecycle and explicit missing-information reads. Keep full observations
+  in logs and give the same scaffold to every policy.
+- Explain deterministic schema/arithmetic failures with specific reasons, and log
+  disagreement with the LLM verdict. Do not silently turn the verifier into a
+  hybrid rule/LLM decision or force a successful final state.
+- Add controlled decision-critical faults and harmless-observation controls.
+  Fault exposure, detection, correction and final outcome are separate quantities;
+  an injected observation fault alone does not mandate oracle FAIL.
+
 ## Local validation changes (2026-11-20, pending team review)
 
 - Shivam: "In a real-world scenario, a company or person would cancel a problematic

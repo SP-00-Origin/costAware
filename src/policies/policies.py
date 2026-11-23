@@ -24,6 +24,7 @@ def should_verify(
     cache:      Any = None,     # VerdictCache — optional
     *,
     config:     Any = None,     # A–D settings; defaults preserve the existing schedule
+    vendor_approval_required: bool = True,
 ) -> Tuple[bool, str]:
     """
     Returns: (verify: bool, reason: str)
@@ -65,7 +66,7 @@ def should_verify(
         if tool_name in HIGH_RISK_TOOLS:
             return True, "high_risk_tool"
         # Trigger 2: schema / sanity failure
-        if _schema_fail(tool_name, result):
+        if _schema_fail(tool_name, result, vendor_approval_required):
             return True, "schema_fail"
         # Trigger 3: the agent's confidence before observing the tool result.
         confidence = parse_confidence(action.get("confidence"))
@@ -81,7 +82,7 @@ def should_verify(
     # ── Policy E: Budget-controlled adaptive ──────────────────────────────────
     if policy == "E":
         assert controller is not None, "Policy E requires a BudgetController"
-        score  = _risk_score(tool_name, result, history)
+        score  = _risk_score(tool_name, result, history, vendor_approval_required)
         decide = score >= controller.threshold
         return decide, "risk_score"
 
@@ -139,25 +140,29 @@ _LIST_FIELDS = {
 _ORDER_STATUSES = {"DRAFT", "PENDING_APPROVAL", "APPROVED", "RELEASED", "CANCELLED"}
 
 
-def _valid_result_fields(record, fields):
-    """Check required observation fields before doing arithmetic or comparisons."""
+def _field_issues(record, fields, path="result"):
+    """Explain malformed fields before doing arithmetic or comparisons."""
     if not isinstance(record, dict):
-        return False
+        return [f"{path}: expected an object"]
+    issues = []
     for name, expected in fields.items():
+        field = f"{path}.{name}"
         if name not in record:
-            return False
+            issues.append(f"{field}: missing required field")
+            continue
         value = record[name]
         allowed = expected if isinstance(expected, tuple) else (expected,)
         if type(value) not in allowed:
-            return False
+            issues.append(f"{field}: wrong type ({type(value).__name__})")
+            continue
         if type(value) in (int, float):
             if value < 0 or (type(value) is float and not math.isfinite(value)):
-                return False
+                issues.append(f"{field}: expected a finite non-negative number")
         if name == "quantity" and value < 1:
-            return False
+            issues.append(f"{field}: quantity must be at least 1")
         if (name == "id" or name.endswith("_id")) and value == "":
-            return False
-    return True
+            issues.append(f"{field}: ID must not be empty")
+    return issues
 
 
 def _quote_sanity_fail(quote):
@@ -168,84 +173,111 @@ def _quote_sanity_fail(quote):
     return (status == "ACTIVE" and quote["expired"]) or (status == "EXPIRED" and not quote["expired"])
 
 
-def _list_sanity_fail(name, records):
-    for record in records:
-        if not _valid_result_fields(record, _LIST_FIELDS[name]):
-            return True
+def _list_issues(name, records):
+    issues = []
+    for index, record in enumerate(records):
+        path = f"result.{name}[{index}]"
+        fields = _field_issues(record, _LIST_FIELDS[name], path)
+        if fields:
+            issues.extend(fields)
+            continue
         if name == "quotes":
             total = record["unit_price"] * record["quantity"] + record["shipping_cost"]
-            if _quote_sanity_fail(record) or not math.isclose(
-                    record["total_price"], total, rel_tol=0, abs_tol=0.01):
-                return True
+            if _quote_sanity_fail(record):
+                issues.append(f"{path}: quote status/expired flag conflict or invalid status")
+            if not math.isclose(record["total_price"], total, rel_tol=0, abs_tol=0.01):
+                issues.append(f"{path}.total_price: observed {record['total_price']}; "
+                              f"unit_price * quantity + shipping_cost = {total}")
         if name == "orders" and record["status"] not in _ORDER_STATUSES:
-            return True
-    if name == "ranked_quotes":
+            issues.append(f"{path}.status: invalid order status {record['status']}")
+    if name == "ranked_quotes" and not issues:
         totals = [record["total_price"] for record in records]
-        return totals != sorted(totals)
-    return False
+        if totals != sorted(totals):
+            issues.append("result.ranked_quotes: prices are not sorted cheapest first")
+    return issues
 
 
-def _discount_schema_fail(result):
+def _discount_issues(result):
     if result["success"]:
-        return not _valid_result_fields(result, {
+        return _field_issues(result, {
             "quote_id": str, "new_unit_price": _NUMBER, "new_total_price": _NUMBER})
-    if not _valid_result_fields(result, {"reason": str}):
-        return True
+    issues = _field_issues(result, {"reason": str})
     for name in ("unit_price", "min_unit_price"):
-        if name in result and not _valid_result_fields(result, {name: _NUMBER}):
-            return True
-    return False
+        if name in result:
+            issues.extend(_field_issues(result, {name: _NUMBER}))
+    return issues
 
 
-def _scalar_sanity_fail(tool_name, result):
+def _scalar_issues(tool_name, result, require_vendor_approval=True):
     if tool_name == "check_budget":
         remaining = result["allocated"] - result["spent"] - result["reserved"]
-        return not math.isclose(result["remaining"], remaining, rel_tol=0, abs_tol=0.01)
+        if not math.isclose(result["remaining"], remaining, rel_tol=0, abs_tol=0.01):
+            return [f"result.remaining: observed {result['remaining']}; allocated - spent - reserved = {remaining}"]
     if tool_name == "check_vendor_status":
-        return result["approved"] and result["suspended"]
+        if require_vendor_approval and result["approved"] and result["suspended"]:
+            return ["result: approved=true conflicts with suspended=true"]
     if tool_name == "check_quote_validity":
-        return (_quote_sanity_fail(result)
-                or (result["current_step"] >= result["expiry_days"] and not result["expired"]))
+        if _quote_sanity_fail(result):
+            return ["result: quote status/expired flag conflict or invalid status"]
+        if result["current_step"] >= result["expiry_days"] and not result["expired"]:
+            return ["result.expired: false although current_step has reached expiry_days"]
     if tool_name == "check_invoice":
         if result["status"] not in {"unpaid", "paid", "disputed"}:
-            return True
+            return [f"result.status: invalid invoice status {result['status']}"]
         if not all(isinstance(item, dict) for item in result["line_items"]):
-            return True
-        return (result["po_total"] is not None and not result["mismatch"]
-                and abs(result["amount"] - result["po_total"]) > 0.01)
+            return ["result.line_items: every entry must be an object"]
+        if (result["po_total"] is not None and not result["mismatch"]
+                and abs(result["amount"] - result["po_total"]) > 0.01):
+            return ["result.mismatch: false although invoice amount differs from po_total"]
     expected_status = {
         "request_approval": "PENDING", "approve_order": "APPROVED",
         "create_purchase_order": "DRAFT", "modify_order": "DRAFT",
         "release_order": "RELEASED", "cancel_order": "CANCELLED",
         "dispute_invoice": "disputed",
     }
-    if tool_name in expected_status:
-        return result["status"] != expected_status[tool_name]
-    return False
+    if tool_name in expected_status and result["status"] != expected_status[tool_name]:
+        return [f"result.status: observed {result['status']}; expected {expected_status[tool_name]} after {tool_name}"]
+    return []
 
 
-def _schema_fail(tool_name: str, result: Any) -> bool:
-    """Cheap observed-only checks. Passing them does not establish true success."""
-    if not isinstance(result, dict):
-        return True
-    if "parse_error" in result or "error" in result or result.get("timeout"):
-        return True
+def result_fields(tool_name, require_vendor_approval=True):
     fields = _RESULT_FIELDS.get(tool_name)
-    if fields is None or not _valid_result_fields(result, fields):
-        return True
+    if not require_vendor_approval and tool_name in ('check_vendor_status', 'get_vendor_details'):
+        fields = dict(fields)
+        fields.pop('approved')
+    return fields
+
+
+def observation_issues(tool_name: str, result: Any, require_vendor_approval=True) -> list:
+    """Cheap observed-only diagnostics, independent of the LLM verdict and oracle."""
+    if not isinstance(result, dict):
+        return ["result: expected an object"]
+    if "parse_error" in result or "error" in result or result.get("timeout"):
+        return ["result: tool error, timeout or parse error; inspect the observation"]
+    fields = result_fields(tool_name, require_vendor_approval)
+    if fields is None:
+        return [f"Unknown result contract for {tool_name}"]
+    issues = _field_issues(result, fields)
+    if issues:
+        return issues
     for name in fields:
-        if name in _LIST_FIELDS and _list_sanity_fail(name, result[name]):
-            return True
+        if name in _LIST_FIELDS:
+            issues.extend(_list_issues(name, result[name]))
     if tool_name == "compare_quotes" and "not_found" in result:
         missing = result["not_found"]
         if not isinstance(missing, list) or not all(isinstance(item, str) for item in missing):
-            return True
+            issues.append("result.not_found: expected a list of quote IDs")
     if tool_name == "request_discount":
-        return _discount_schema_fail(result)
-    return _scalar_sanity_fail(tool_name, result)
+        issues.extend(_discount_issues(result))
+    issues.extend(_scalar_issues(tool_name, result, require_vendor_approval))
+    return issues
 
 
-def _risk_score(tool_name: str, result: dict, history: list) -> float:
+def _schema_fail(tool_name: str, result: Any, require_vendor_approval=True) -> bool:
+    return bool(observation_issues(tool_name, result, require_vendor_approval))
+
+
+def _risk_score(tool_name: str, result: dict, history: list, require_vendor_approval=True) -> float:
     """
     Continuous [0.0, 1.0] risk score for Policy E.
     Higher = more likely to verify.
@@ -257,7 +289,7 @@ def _risk_score(tool_name: str, result: dict, history: list) -> float:
     elif tool_name in MEDIUM_RISK_TOOLS:
         score += 0.25
     # Schema fail
-    if _schema_fail(tool_name, result):
+    if _schema_fail(tool_name, result, require_vendor_approval):
         score += 0.4
     # Confidence
     confidence = result.get("_confidence", 1.0) if isinstance(result, dict) else 1.0

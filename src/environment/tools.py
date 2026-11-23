@@ -31,7 +31,7 @@ TOOL_SPECS: Dict[str, Dict[str, Any]] = {
     },
     "get_vendor_details": {
         "risk": RISK_LOW,
-        "description": "Vendor profile: eligibility, approval, preferred flag, payment profile.",
+        "description": "Vendor profile only; omits suspension status. Use check_vendor_status for current standing.",
         "parameters": _obj({"vendor_id": _STR}),
     },
     "check_vendor_status": {
@@ -61,7 +61,7 @@ TOOL_SPECS: Dict[str, Dict[str, Any]] = {
     },
     "compare_quotes": {
         "risk": RISK_LOW,
-        "description": "Rank the given quotes by total price including shipping (cheapest first).",
+        "description": "Rank quotes by price including shipping. Does not check vendor approval or suspension; vet vendors separately.",
         "parameters": _obj({"quote_ids": {"type": "array", "items": _STR}}),
     },
     "check_invoice": {
@@ -78,7 +78,8 @@ TOOL_SPECS: Dict[str, Dict[str, Any]] = {
     },
     "request_approval": {
         "risk": RISK_MEDIUM,
-        "description": "Submit a DRAFT purchase order for manager approval. The requester must be the project owner.",
+        "description": "Submit a DRAFT PO for approval using its po_id and project owner as requester. "
+                       "Returns approval_id for approve_order; a request alone does not approve the PO.",
         "parameters": _obj({"po_id": _STR, "requester": _STR}),
     },
     "dispute_invoice": {
@@ -100,7 +101,8 @@ TOOL_SPECS: Dict[str, Dict[str, Any]] = {
     },
     "approve_order": {
         "risk": RISK_HIGH,
-        "description": "Approve a pending approval request, moving the PO to APPROVED.",
+        "description": "Approve the request using ONLY approval_id returned by request_approval. "
+                       "Moves PO to APPROVED; call release_order separately. Do not pass requester or po_id.",
         "parameters": _obj({"approval_id": _STR}),
     },
     "release_order": {

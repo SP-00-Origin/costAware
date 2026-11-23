@@ -1,0 +1,32 @@
+{
+  "A": {
+    "pairs": 60,
+    "tasks": 20,
+    "success_delta": -0.06666666666666667,
+    "success_delta_ci95": [
+      -0.25,
+      0.1
+    ],
+    "calls_delta": -10.7
+  },
+  "C": {
+    "pairs": 60,
+    "tasks": 20,
+    "success_delta": -0.016666666666666663,
+    "success_delta_ci95": [
+      -0.15,
+      0.13333333333333333
+    ],
+    "calls_delta": -6.683333333333334
+  },
+  "D": {
+    "pairs": 60,
+    "tasks": 20,
+    "success_delta": 0.016666666666666666,
+    "success_delta_ci95": [
+      0,
+      0.049999999999999996
+    ],
+    "calls_delta": -5.333333333333333
+  }
+}

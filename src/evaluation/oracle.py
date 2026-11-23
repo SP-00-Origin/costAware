@@ -49,19 +49,19 @@ def _approval_valid(state: SimulatorState, po) -> bool:
     return bool(apr and apr.status == ApprovalStatus.APPROVED and apr.valid)
 
 
-def _vendor_ok(state: SimulatorState, vendor_id: str) -> bool:
+def _vendor_ok(state: SimulatorState, vendor_id: str, require_approval=True) -> bool:
     v = state.vendors.get(vendor_id)
-    return bool(v and v.eligible and v.approved and not v.suspended)
+    return bool(v and v.eligible and not v.suspended and (v.approved or not require_approval))
 
 
-def _always_on(state: SimulatorState, initial: SimulatorState = None) -> Dict[str, Dict[str, Any]]:
+def _always_on(state: SimulatorState, initial: SimulatorState = None, require_vendor_approval=True) -> Dict[str, Dict[str, Any]]:
     checks = {}
 
     over = {b.id: round(b.remaining, 2) for b in state.budgets.values() if b.remaining < -EPS}
     checks["budgets_within"] = _check({}, over, not over)
 
     bad_vendor = sorted(o.id for o in state.orders.values()
-                        if _active(o) and not _vendor_ok(state, o.vendor_id))
+                        if _active(o) and not _vendor_ok(state, o.vendor_id, require_vendor_approval))
     checks["vendor_standing"] = _check([], bad_vendor, not bad_vendor)
 
     stale = []
@@ -110,14 +110,14 @@ def _order_requirement(state: SimulatorState, req: Dict[str, Any]) -> Dict[str, 
     return _check(req, actual, ok)
 
 
-def _legacy(state: SimulatorState, expected: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+def _legacy(state: SimulatorState, expected: Dict[str, Any], require_vendor_approval=True) -> Dict[str, Dict[str, Any]]:
     checks = {}
     po = state.orders.get(expected.get("po_id")) if expected.get("po_id") else None
     if "po_status" in expected:
         actual = po.status.value if po else "NOT_CREATED"
         checks["po_status"] = _check(expected["po_status"], actual, actual == expected["po_status"])
     if "vendor_id" in expected:
-        ok = _vendor_ok(state, expected["vendor_id"])
+        ok = _vendor_ok(state, expected["vendor_id"], require_vendor_approval)
         checks["vendor_eligible"] = _check(True, ok, ok)
     if "budget_id" in expected:
         b = state.budgets.get(expected["budget_id"])
@@ -150,7 +150,10 @@ def oracle_check(
     Returns:
         (passed, diff) — passed is True only if every check passes.
     """
-    checks = _always_on(true_state, initial_state)
+    require_vendor_approval = expected.get('vendor_approval_required', True)
+    if type(require_vendor_approval) is not bool:
+        raise ValueError('vendor_approval_required must be a boolean')
+    checks = _always_on(true_state, initial_state, require_vendor_approval)
 
     for i, req in enumerate(expected.get("orders", [])):
         checks[f"order[{i}]:{req['project_id']}/{req['component_id']}"] = _order_requirement(true_state, req)
@@ -177,7 +180,7 @@ def oracle_check(
         checks["max_new_orders"] = _check(expected["max_new_orders"], new,
                                           len(new) <= expected["max_new_orders"])
 
-    checks.update(_legacy(true_state, expected))
+    checks.update(_legacy(true_state, expected, require_vendor_approval))
 
     task_specific = len(checks) > 4
     passed = task_specific and all(c["pass"] for c in checks.values())

@@ -85,6 +85,7 @@ def write_project_dashboard(root):
                 "provider": config["provider"],
                 "model": config["model"],
                 "fault_rate": config["fault_rate"],
+                "vendor_rule": config.get('vendor_rule', 'qualified'),
                 "href": quote(Path(os.path.relpath(report, output)).as_posix()),
                 "summary": summarize(episodes),
             })

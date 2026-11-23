@@ -1,0 +1,69 @@
+{
+  "initial_run": "d57331709a6f43088a2b58faf01093ab",
+  "replication_run": "fbe4b0bd3309497da33ee617c1fe2983",
+  "cells": 240,
+  "agreed": 235,
+  "changed": 5,
+  "changed_cells": [
+    {
+      "task": "T13",
+      "seed": 7,
+      "policy": "D",
+      "initial": "ERROR",
+      "replication": "PASS",
+      "same": false,
+      "initial_calls": 3,
+      "replication_calls": 5,
+      "initial_failures": "{\"order[0]:PROJ-M/C-Q\": {\"expected\": {\"project_id\": \"PROJ-M\", \"component_id\": \"C-Q\", \"quantity\": 15, \"status\": \"RELEASED\", \"approval_valid\": true}, \"actual\": {\"po_id\": \"PO-EX8\", \"vendor_id\": \"V1\", \"quantity\": 15, \"status\": \"PENDING_APPROVAL\", \"unit_price\": 1200.0, \"approval_valid\": false}, \"pass\": false}}",
+      "replication_failures": "{}"
+    },
+    {
+      "task": "T16",
+      "seed": 12,
+      "policy": "B",
+      "initial": "FAIL",
+      "replication": "PASS",
+      "same": false,
+      "initial_calls": 19,
+      "replication_calls": 20,
+      "initial_failures": "{\"no_duplicate_orders\": {\"expected\": {}, \"actual\": {\"PROJ-P/C-U\": [\"PO-0001\", \"PO-0003\"]}, \"pass\": false}, \"order[0]:PROJ-P/C-U\": {\"expected\": {\"project_id\": \"PROJ-P\", \"component_id\": \"C-U\", \"vendor_id\": \"V1\", \"quantity\": 20, \"status\": \"RELEASED\", \"approval_valid\": true}, \"actual\": {\"matching_active_orders\": [\"PO-0001\", \"PO-0003\"]}, \"pass\": false}, \"order[1]:PROJ-P/C-V\": {\"expected\": {\"project_id\": \"PROJ-P\", \"component_id\": \"C-V\", \"vendor_id\": \"V3\", \"quantity\": 30, \"status\": \"RELEASED\", \"approval_valid\": true}, \"actual\": {\"matching_active_orders\": []}, \"pass\": false}}",
+      "replication_failures": "{}"
+    },
+    {
+      "task": "T16",
+      "seed": 23,
+      "policy": "A",
+      "initial": "FAIL",
+      "replication": "PASS",
+      "same": false,
+      "initial_calls": 0,
+      "replication_calls": 0,
+      "initial_failures": "{\"vendor_standing\": {\"expected\": [], \"actual\": [\"PO-0002\"], \"pass\": false}, \"no_duplicate_orders\": {\"expected\": {}, \"actual\": {\"PROJ-P/C-U\": [\"PO-0001\", \"PO-0002\"]}, \"pass\": false}, \"order[0]:PROJ-P/C-U\": {\"expected\": {\"project_id\": \"PROJ-P\", \"component_id\": \"C-U\", \"vendor_id\": \"V1\", \"quantity\": 20, \"status\": \"RELEASED\", \"approval_valid\": true}, \"actual\": {\"matching_active_orders\": [\"PO-0001\", \"PO-0002\"]}, \"pass\": false}, \"order[1]:PROJ-P/C-V\": {\"expected\": {\"project_id\": \"PROJ-P\", \"component_id\": \"C-V\", \"vendor_id\": \"V3\", \"quantity\": 30, \"status\": \"RELEASED\", \"approval_valid\": true}, \"actual\": {\"matching_active_orders\": []}, \"pass\": false}}",
+      "replication_failures": "{}"
+    },
+    {
+      "task": "T16",
+      "seed": 23,
+      "policy": "C",
+      "initial": "FAIL",
+      "replication": "PASS",
+      "same": false,
+      "initial_calls": 6,
+      "replication_calls": 6,
+      "initial_failures": "{\"order[0]:PROJ-P/C-U\": {\"expected\": {\"project_id\": \"PROJ-P\", \"component_id\": \"C-U\", \"vendor_id\": \"V1\", \"quantity\": 20, \"status\": \"RELEASED\", \"approval_valid\": true}, \"actual\": {\"po_id\": \"PO-0002\", \"vendor_id\": \"V1\", \"quantity\": 30, \"status\": \"RELEASED\", \"unit_price\": 600.0, \"approval_valid\": true}, \"pass\": false}}",
+      "replication_failures": "{}"
+    },
+    {
+      "task": "T17",
+      "seed": 12,
+      "policy": "C",
+      "initial": "PASS",
+      "replication": "FAIL",
+      "same": false,
+      "initial_calls": 6,
+      "replication_calls": 5,
+      "initial_failures": "{}",
+      "replication_failures": "{\"order[1]:PROJ-Q/C-X\": {\"expected\": {\"project_id\": \"PROJ-Q\", \"component_id\": \"C-X\", \"vendor_id\": \"V1\", \"quantity\": 30, \"status\": \"RELEASED\"}, \"actual\": {\"po_id\": \"PO-0001\", \"vendor_id\": \"V1\", \"quantity\": 30, \"status\": \"PENDING_APPROVAL\", \"unit_price\": 270.0, \"approval_valid\": false}, \"pass\": false}}"
+    }
+  ]
+}

@@ -32,7 +32,7 @@ def episode_story(episode):
     for index, step in enumerate(trajectory):
         selected = step.get('verify_decision')
         decision = 'Selected' if selected else 'Skipped' if selected is False else 'Not recorded'
-        reasons = {'no_verify': 'Policy A never verifies', 'always_verify': 'Policy B checks every action',
+        reasons = {'no_verify': 'Policy A uses no separate verifier; agent reads are still allowed', 'always_verify': 'Policy B checks every action',
                    'fixed_schedule': 'Scheduled action under Policy C', 'schema_fail': 'Observed schema or sanity check failed',
                    'high_risk_tool': 'High-risk action', 'low_confidence': 'Agent confidence below threshold',
                    'no_trigger': 'No policy trigger matched', 'recovery_recheck': 'Check the retry observation'}
@@ -43,6 +43,11 @@ def episode_story(episode):
             check = ('Suspicious: ' if verdict['suspicious'] else 'Accepted: ') + verdict['reason']
         if step.get('verifier_error'):
             check = 'Verifier error: ' + step['verifier_error']
+        diagnostics = step.get('observable_checks', {})
+        if diagnostics.get('issues'):
+            check += '\nDeterministic observation checks: ' + '; '.join(diagnostics['issues'])
+        if diagnostics.get('llm_accepted_despite_failed_check'):
+            check += '\nDisagreement: LLM accepted despite a failed deterministic check.'
         reaction = []
         if step.get('recovery_attempts'):
             reaction.append('Automatic read retry requested.')

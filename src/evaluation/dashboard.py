@@ -32,7 +32,7 @@ def render_project_dashboard(runs, skipped):
                     else f'{run["provider"]} · {run["model"]}')
             cards.append(f"""<article>
 <div class="run-head"><div><h3>{escape(mode)}</h3>
-<p>Run {escape(run["id"])} · fault rate {run["fault_rate"]:.0%}</p></div>
+<p>Run {escape(run["id"])} · fault rate {run["fault_rate"]:.0%} · vendor rule: {escape(run.get('vendor_rule', 'qualified'))}</p></div>
 <a href="{escape(run["href"])}">Open run details</a></div>
 <div class="scroll" tabindex="0" role="region" aria-label="Policy metrics for run {escape(run["id"])}">
 <table><thead><tr><th>Policy</th><th>Finished without provider error</th><th>Oracle success</th>
@@ -228,7 +228,7 @@ pre {{ white-space:pre-wrap;overflow-wrap:anywhere;font-size:.83rem;background:v
 a:focus-visible,summary:focus-visible,.scroll:focus-visible {{ outline:2px solid var(--accent);outline-offset:3px }}
 </style></head><body><main>
 <header><span class="run-mode">{badge}</span><h1>CostAware experiment dashboard</h1>
-<p>Run {escape(header["run_id"])} · fault rate {config["fault_rate"]:.0%}</p></header>
+<p>Run {escape(header["run_id"])} · fault rate {config["fault_rate"]:.0%} · vendor rule: {escape(config.get('vendor_rule', 'qualified'))}</p></header>
 {note}
 <section><h2>Reliability versus verification workload</h2>
 {reliability_plot(summary)}</section>

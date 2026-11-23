@@ -39,6 +39,7 @@ from ..provider_errors import error_details
 from ..verifier.verifier import observation_history, verify_step
 from ..verifier.recovery import retry_action
 from .prompts import FINISH_TOOL, SYSTEM_PROMPT, task_message
+from ..environment.evidence import vendor_evidence
 
 DEFAULT_MAX_STEPS = 30
 
@@ -107,6 +108,8 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
                 verifier_llm=None, policy_config=None):
     """Compile the agent graph for one episode on `env` under verification `policy`."""
     settings = validate_policy_config(policy_config)
+    from ..environment.variants import vendor_rule_prompt
+    require_vendor_approval = env.task.expected_final_state.get('vendor_approval_required', True)
     if policy not in ("A", "B", "C", "D", "E"):
         raise ValueError(f"Unknown policy: {policy}")
     if policy != "A" and verifier_llm is None:
@@ -119,7 +122,8 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
         return {
             "task_id": env.task.id,
             "goal": env.task.goal,
-            "messages": [SystemMessage(SYSTEM_PROMPT), HumanMessage(task_message(env.task))],
+            "messages": [SystemMessage(vendor_rule_prompt(SYSTEM_PROMPT, require_vendor_approval)),
+                         HumanMessage(task_message(env.task))],
             "step": 0,
             "trajectory": [],
             "done": False,
@@ -142,7 +146,12 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
         for attempt in (1, 2):
             update["llm_calls"] += 1
             try:
-                ai: AIMessage = llm.invoke(state["messages"])
+                evidence = vendor_evidence(state.get('trajectory', []), require_vendor_approval)
+                model_messages = state['messages']
+                if state.get('trajectory'):
+                    model_messages = model_messages + [HumanMessage(
+                        'Observed working summary (not ground truth): ' + json.dumps(evidence))]
+                ai: AIMessage = llm.invoke(model_messages)
             except Exception as e:  # noqa: BLE001
                 finished = _finish_from_failed_call(e)
                 if finished is None:
@@ -216,7 +225,7 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
                                        result=r["observed_result"],
                                        history=observation_history(state["trajectory"]),
                                        step=state["step"], controller=controller, cache=cache,
-                                       config=settings)
+                                       config=settings, vendor_approval_required=require_vendor_approval)
         r.update(verify_decision=bool(verify), trigger_reason=reason,
                  agent_step=state["step"], verifier_verdict=None, recovery_attempts=0,
                  recovery_records=[], final_result_used=r["observed_result"],
@@ -231,7 +240,7 @@ def build_graph(env: ProcurementEnv, llm, policy: str = "A", controller=None, ca
             history = history + [r]
         check = verify_step(verifier_llm, state["goal"],
                             {"tool": current["tool"], "args": current["args"]},
-                            current["observed_result"], history)
+                            current["observed_result"], history, require_vendor_approval)
         current.update(verifier_verdict=check["verdict"], verifier_error=check["error"],
                        verifier_usage=check["usage"], verifier_latency_ms=check["latency_ms"],
                        observable_checks=check['observable_checks'])
@@ -406,6 +415,7 @@ def run_episode(task, llm, policy: str = "A", seed: int = 0, fault_rate: float =
         "task_id": task.id, "tier": task.tier, "family": task.family,
         "policy": policy, "seed": seed, "fault_rate": fault_rate, "model": model_name,
         "policy_config": settings, "max_steps": max_steps,
+        "vendor_rule": 'qualified' if task.expected_final_state.get('vendor_approval_required', True) else 'suspension_only',
         "oracle_pass": final["oracle_pass"], "oracle_diff": final["oracle_diff"],
         "done_reason": final["done_reason"], "final_summary": final.get("final_summary", ""),
         "steps": final["step"], "tool_calls": len(traj), "llm_calls": final.get("llm_calls"),

@@ -1,0 +1,234 @@
+{
+  "A": {
+    "planned": 60,
+    "completed": 60,
+    "passed": 33,
+    "errors": 0,
+    "incomplete": 0,
+    "completion_rate": 1.0,
+    "success_rate": 0.55,
+    "faulted_completed": 48,
+    "fault_recovery_rate": 0.4583333333333333,
+    "error_propagation_rate": 0.5416666666666666,
+    "selection_rate": 0.0,
+    "verifier_calls_per_action": 0.0,
+    "recovery_calls_per_action": 0.0,
+    "verifier_errors": 0,
+    "verifier_error_rate": null,
+    "diagnostics": {
+      "selected_actions": 0,
+      "faulted_actions": 118,
+      "selected_faulted_actions": 0,
+      "triggers": {},
+      "trigger_precision": null,
+      "trigger_recall": 0.0,
+      "verdict_counts": {
+        "tp": 0,
+        "fn": 0,
+        "fp": 0,
+        "tn": 0
+      },
+      "verifier_true_positive_rate": null,
+      "verifier_false_negative_rate": null,
+      "verifier_false_positive_rate": null,
+      "corrupted_checks": 0,
+      "uncorrupted_checks": 0,
+      "uncorrupted_tool_error_warnings": 0,
+      "underlying_tool_errors": 46,
+      "invalid_argument_calls": 9
+    },
+    "agent_claimed_done": 49,
+    "agent_gave_up": 4,
+    "near_context_calls": 0,
+    "steps": 571,
+    "verify_triggered": 0,
+    "verifier_calls": 0,
+    "recovery_attempts": 0,
+    "verifier_latency_ms": 0.0,
+    "wall_time_s": 668.419,
+    "agent_usage": {
+      "input_tokens": 1756582,
+      "output_tokens": 22950
+    },
+    "verifier_usage": {
+      "input_tokens": 0,
+      "output_tokens": 0
+    }
+  },
+  "B": {
+    "planned": 60,
+    "completed": 60,
+    "passed": 37,
+    "errors": 0,
+    "incomplete": 0,
+    "completion_rate": 1.0,
+    "success_rate": 0.6166666666666667,
+    "faulted_completed": 49,
+    "fault_recovery_rate": 0.5510204081632653,
+    "error_propagation_rate": 0.4489795918367347,
+    "selection_rate": 1.0,
+    "verifier_calls_per_action": 1.1145833333333333,
+    "recovery_calls_per_action": 0.11458333333333333,
+    "verifier_errors": 0,
+    "verifier_error_rate": 0.0,
+    "diagnostics": {
+      "selected_actions": 576,
+      "faulted_actions": 121,
+      "selected_faulted_actions": 121,
+      "triggers": {
+        "always_verify": 576
+      },
+      "trigger_precision": 0.21006944444444445,
+      "trigger_recall": 1.0,
+      "verdict_counts": {
+        "tp": 116,
+        "fn": 20,
+        "fp": 25,
+        "tn": 481
+      },
+      "verifier_true_positive_rate": 0.8529411764705882,
+      "verifier_false_negative_rate": 0.14705882352941177,
+      "verifier_false_positive_rate": 0.04940711462450593,
+      "corrupted_checks": 136,
+      "uncorrupted_checks": 506,
+      "uncorrupted_tool_error_warnings": 7,
+      "underlying_tool_errors": 9,
+      "invalid_argument_calls": 4
+    },
+    "agent_claimed_done": 54,
+    "agent_gave_up": 0,
+    "near_context_calls": 0,
+    "steps": 576,
+    "verify_triggered": 576,
+    "verifier_calls": 642,
+    "recovery_attempts": 66,
+    "verifier_latency_ms": 925072.8089999999,
+    "wall_time_s": 1686.902,
+    "agent_usage": {
+      "input_tokens": 1981868,
+      "output_tokens": 22979
+    },
+    "verifier_usage": {
+      "input_tokens": 878387,
+      "output_tokens": 23892
+    }
+  },
+  "C": {
+    "planned": 60,
+    "completed": 60,
+    "passed": 36,
+    "errors": 0,
+    "incomplete": 0,
+    "completion_rate": 1.0,
+    "success_rate": 0.6,
+    "faulted_completed": 48,
+    "fault_recovery_rate": 0.5208333333333334,
+    "error_propagation_rate": 0.4791666666666667,
+    "selection_rate": 0.3641025641025641,
+    "verifier_calls_per_action": 0.41196581196581195,
+    "recovery_calls_per_action": 0.04786324786324787,
+    "verifier_errors": 0,
+    "verifier_error_rate": 0.0,
+    "diagnostics": {
+      "selected_actions": 213,
+      "faulted_actions": 124,
+      "selected_faulted_actions": 39,
+      "triggers": {
+        "fixed_schedule": 213
+      },
+      "trigger_precision": 0.18309859154929578,
+      "trigger_recall": 0.31451612903225806,
+      "verdict_counts": {
+        "tp": 36,
+        "fn": 7,
+        "fp": 25,
+        "tn": 173
+      },
+      "verifier_true_positive_rate": 0.8372093023255814,
+      "verifier_false_negative_rate": 0.16279069767441862,
+      "verifier_false_positive_rate": 0.12626262626262627,
+      "corrupted_checks": 43,
+      "uncorrupted_checks": 198,
+      "uncorrupted_tool_error_warnings": 9,
+      "underlying_tool_errors": 41,
+      "invalid_argument_calls": 4
+    },
+    "agent_claimed_done": 53,
+    "agent_gave_up": 2,
+    "near_context_calls": 0,
+    "steps": 585,
+    "verify_triggered": 213,
+    "verifier_calls": 241,
+    "recovery_attempts": 28,
+    "verifier_latency_ms": 321784.515,
+    "wall_time_s": 1036.6090000000002,
+    "agent_usage": {
+      "input_tokens": 1897534,
+      "output_tokens": 23542
+    },
+    "verifier_usage": {
+      "input_tokens": 298905,
+      "output_tokens": 8891
+    }
+  },
+  "D": {
+    "planned": 60,
+    "completed": 60,
+    "passed": 38,
+    "errors": 0,
+    "incomplete": 0,
+    "completion_rate": 1.0,
+    "success_rate": 0.6333333333333333,
+    "faulted_completed": 49,
+    "fault_recovery_rate": 0.5714285714285714,
+    "error_propagation_rate": 0.42857142857142855,
+    "selection_rate": 0.4542314335060449,
+    "verifier_calls_per_action": 0.5561312607944733,
+    "recovery_calls_per_action": 0.10189982728842832,
+    "verifier_errors": 0,
+    "verifier_error_rate": 0.0,
+    "diagnostics": {
+      "selected_actions": 263,
+      "faulted_actions": 122,
+      "selected_faulted_actions": 106,
+      "triggers": {
+        "schema_fail": 77,
+        "high_risk_tool": 185,
+        "low_confidence": 1
+      },
+      "trigger_precision": 0.40304182509505704,
+      "trigger_recall": 0.8688524590163934,
+      "verdict_counts": {
+        "tp": 113,
+        "fn": 6,
+        "fp": 20,
+        "tn": 183
+      },
+      "verifier_true_positive_rate": 0.9495798319327731,
+      "verifier_false_negative_rate": 0.05042016806722689,
+      "verifier_false_positive_rate": 0.09852216748768473,
+      "corrupted_checks": 119,
+      "uncorrupted_checks": 203,
+      "uncorrupted_tool_error_warnings": 7,
+      "underlying_tool_errors": 9,
+      "invalid_argument_calls": 4
+    },
+    "agent_claimed_done": 54,
+    "agent_gave_up": 0,
+    "near_context_calls": 0,
+    "steps": 579,
+    "verify_triggered": 263,
+    "verifier_calls": 322,
+    "recovery_attempts": 59,
+    "verifier_latency_ms": 450357.378,
+    "wall_time_s": 1177.7409999999995,
+    "agent_usage": {
+      "input_tokens": 1990274,
+      "output_tokens": 23104
+    },
+    "verifier_usage": {
+      "input_tokens": 477693,
+      "output_tokens": 11754
+    }
+  }
+}

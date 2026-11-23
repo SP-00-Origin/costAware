@@ -1,0 +1,23 @@
+{
+  "phase": 8,
+  "provider": "ollama",
+  "model": "qwen3:8b",
+  "verifier_model": "qwen3:8b",
+  "vendor_rule": "qualified",
+  "tasks": ["T08", "T10", "T16", "T18"],
+  "policies": ["A", "B", "C", "D"],
+  "seeds": [12, 23],
+  "fault_rate": 0.0,
+  "max_steps": 30,
+  "policy_config": {"interval": 3, "confidence_threshold": 0.6},
+  "model_options": {
+    "context_length": 8192,
+    "agent_max_tokens": 2048,
+    "verifier_max_tokens": 1024,
+    "temperature": 0.0,
+    "model_seed": 7,
+    "thinking": false,
+    "timeout_s": 180
+  },
+  "max_total_tokens": null
+}
